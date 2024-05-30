@@ -1,4 +1,4 @@
-from str_enum import StrEnum
+from .str_enum import StrEnum
 
 TIMEOUT = 5 * 60
 DEVICEINFOREFRESH = 30 * 60  #Number of seconds to wait before refreshing device info as it doesn't change very often
