@@ -1,7 +1,7 @@
 """ Data classes for Redback Tech API """
 from __future__ import annotations
 
-from .dataclasses import dataclass
+from dataclasses import dataclass
 import datetime
 from typing import Any, Optional
 
