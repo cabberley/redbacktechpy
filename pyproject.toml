@@ -7,9 +7,9 @@ authors = [
 description = "Python Module to support Home Asssistant integration with Redback Technologies Smart Hybrid Inverter"
 readme = "README.md"
 requires-python = ">=3.10"
+license = {file = "LICENSE.txt"}
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: GNU GENERAL PUBLIC LICENSE",
     "Operating System :: OS Independent",
 ]
 dependencies = [
