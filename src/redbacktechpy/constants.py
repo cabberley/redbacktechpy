@@ -60,3 +60,8 @@ class DeviceInfo(StrEnum):
     SW_VERSION = 'sw_version'
     HW_VERSION = 'hw_version'
     SERIAL_NUMBER = 'serial_number'
+
+
+ENTITY_DATA_CURRENT = {
+    
+}

@@ -13,6 +13,7 @@ class RedbackTechData:
     user_id: str
     inverters: Optional[dict[int, Any]] = None
     batterys: Optional[dict[int, Any]] = None
+    entities: Optional[dict[int, Any]] = None
 
 @dataclass
 class Site:
@@ -21,7 +22,14 @@ class Site:
     id: str
     data: dict[str, Any]
     type: str
-    
+
+@dataclass
+class RedbackEntitys:
+    entity_id: str
+    device_id: str
+    data: dict[str, Any]
+    type: Optional[str] = None
+    device_data: Optional[dict[str, Any]] = None
 @dataclass
 class Inverters:
     """Dataclass for Redback Inverters."""
