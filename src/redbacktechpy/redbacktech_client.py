@@ -20,6 +20,7 @@ from .constants import (
 from .model import (
     Inverters,
     Batterys,
+    RedbackTechData,
 )
 from .exceptions import (
         AuthError, 
@@ -68,7 +69,11 @@ class RedbackTechClient:
                     battery_data[bat_id] = bat_instance
                     
         
-        return
+        return RedbackTechData(
+            user_id: self.client_id
+            inverters = inverter_data
+            batterys = battery_data
+        )
         
     async def api_login(self) -> None:
         """Login to Redback API and obtain token."""
