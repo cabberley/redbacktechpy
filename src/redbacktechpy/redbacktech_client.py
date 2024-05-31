@@ -70,8 +70,8 @@ class RedbackTechClient:
                     
         
         return RedbackTechData(
-            user_id: self.client_id
-            inverters = inverter_data
+            user_id = self.client_id,
+            inverters = inverter_data,
             batterys = battery_data
         )
         
