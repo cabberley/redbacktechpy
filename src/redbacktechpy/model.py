@@ -7,6 +7,14 @@ from typing import Any, Optional
 
 
 @dataclass
+class RedbackTechData:
+    """Dataclass for all RedbackTech Data."""
+
+    user_id: str
+    inverters: Optional[dict[int, Any]] = None
+    batterys: Optional[dict[int, Any]] = None
+
+@dataclass
 class Site:
     """Dataclass for Redback Sites."""
 
