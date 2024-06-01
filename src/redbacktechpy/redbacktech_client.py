@@ -507,7 +507,8 @@ class RedbackTechClient:
         }
                
         entity_instance = RedbackEntitys(
-            entity_id=entity['entity_name'],
+            #entity_id=entity['entity_name'],
+            entity_id=data['id'],
             device_id=entity['device_id'],
             type=entity['device_type'],
             data=entity,
