@@ -64,15 +64,15 @@ class RedbackTechClient:
         entity_data: dict[str, RedbackEntitys] = {}
         device_info_data: dict[str, DeviceInfo] = {}
         
-        #if self._redback_devices is not None:
-        #    for device in self._redback_devices:
-        #        if device['device_type'] == 'inverter':
-        #            in_instance, in_id = await self._handle_inverter(device)
-        #            inverter_data[in_id] = in_instance
+        if self._redback_devices is not None:
+            for device in self._redback_devices:
+                if device['device_type'] == 'inverter':
+                    in_instance, in_id = await self._handle_inverter(device)
+                    inverter_data[in_id] = in_instance
                     
-        #        if device['device_type'] == 'battery':
-        #            bat_instance, bat_id = await self._handle_battery(device)
-        #            battery_data[bat_id] = bat_instance
+                if device['device_type'] == 'battery':
+                    bat_instance, bat_id = await self._handle_battery(device)
+                    battery_data[bat_id] = bat_instance
         if self._redback_entities is not None:
             for entity in self._redback_entities:
                 ent_instance, ent_id = await self._handle_entity(entity)
@@ -299,18 +299,18 @@ class RedbackTechClient:
         for serial_number in self._serial_numbers:
             response1 = await self.get_static_by_serial(serial_number)
             response2 = await self.get_dynamic_by_serial(serial_number)
-            #self._flatInverters = await self._convert_static_by_serial_to_inverter_list(response1, response2)
-            #self._redback_devices.append(self._flatInverters)  ###
+            self._flatInverters = await self._convert_static_by_serial_to_inverter_list(response1, response2)
+            self._redback_devices.append(self._flatInverters)  ###
             await self._convert_responses_to_inverter_entities(response1, response2)
             await self._create_device_info_inverter(response1)
             #print(self._flatInverters['serial_number'])
             #response = await self.create_dynamic_info()
             if response1['Data']['Nodes'][0]['StaticData']['BatteryCount'] > 0:
                 soc_data = await self.get_config_by_serial(response1['Data']['Nodes'][0]['StaticData']['Id'])
-                #self._flatBatterys = await self._convert_static_by_serial_to_battery_list(response1, response2, soc_data)
+                self._flatBatterys = await self._convert_static_by_serial_to_battery_list(response1, response2, soc_data)
                 await self._convert_responses_to_battery_entities(response1, response2, soc_data)
                 await self._create_device_info_battery(response1)
-            #self._redback_devices.append(self._flatBatterys)
+                self._redback_devices.append(self._flatBatterys)
         self._device_info_refresh_time = datetime.now() + timedelta(seconds=DEVICEINFOREFRESH)
         return 
     
@@ -370,9 +370,9 @@ class RedbackTechClient:
         dataDict['power_mode_inverter_mode'] = data2['Data']['Inverters'][0]['PowerMode']['InverterMode']
         dataDict['power_mode_power_w'] = data2['Data']['Inverters'][0]['PowerMode']['PowerW']
         for pv in data2['Data']['PVs']:
-            dataDict[f'pv_{pvId}_current_a'] = pv['CurrentA']
-            dataDict[f'pv_{pvId}_voltage_v'] = pv['VoltageV']
-            dataDict[f'pv_{pvId}_power_kw'] = pv['PowerkW']
+            dataDict[f'mppt_{pvId}_current_a'] = pv['CurrentA']
+            dataDict[f'mppt_{pvId}_voltage_v'] = pv['VoltageV']
+            dataDict[f'mppt_{pvId}_power_kw'] = pv['PowerkW']
             pvId += 1
         for phase in data2['Data']['Phases']:  
             phaseAlpha=phase['Id']
