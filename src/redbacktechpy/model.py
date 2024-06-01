@@ -14,6 +14,7 @@ class RedbackTechData:
     inverters: Optional[dict[int, Any]] = None
     batterys: Optional[dict[int, Any]] = None
     entities: Optional[dict[int, Any]] = None
+    devices: Optional[dict[int, Any]] = None
 
 @dataclass
 class Site:
@@ -52,7 +53,9 @@ class Batterys:
 class DeviceInfo:
     """Dataclass for Device Info."""
 
-    id: str
-    device_serial_number: str
-    data: dict[str, Any]
-    type: str
+    identifiers: str
+    name: str
+    model: str
+    sw_version: str
+    hw_version: str
+    serial_number: str

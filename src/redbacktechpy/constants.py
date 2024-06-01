@@ -24,6 +24,9 @@ class Endpoint(StrEnum):
     API_ENERGY_DYNAMIC_MULTIPLE_BY_SERIAL = 'Api/v2.21/EnergyData/Multiple/BySerialNumber/Dynamic'
     API_ENERGY_DYNAMIC_BY_SERIAL = 'Api/v2.21/EnergyData/Dynamic/BySerialNumber/'
     API_ENERGY_DYNAMIC_BY_SITE = 'Api/v2.21/EnergyData/{self.siteId}/Dynamic'
+    API_SCHEDULE_CREATE = 'Api/v2/Schedule/Create/By/SerialNumber'  
+    API_SCHEDULE_DELETE = 'Api/v2/Schedule/Delete/By/SerialNumber/'  #{serialNumber}/{scheduleId}
+    API_SCHEDULE_GET = '/Api/v2/Schedule/By/SerialNumber/' #{serialNumber}
     PORTAL_LOGIN = 'Account/Login'
     PORTAL_CONFIGURE = 'productcontrol/Configure?serialNumber='
     PORTAL_INVERTER_SET = 'productcontrol/Index'

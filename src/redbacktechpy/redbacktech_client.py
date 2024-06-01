@@ -22,6 +22,7 @@ from .model import (
     Batterys,
     RedbackTechData,
     RedbackEntitys,
+    DeviceInfo,
 )
 from .exceptions import (
         AuthError, 
@@ -51,6 +52,7 @@ class RedbackTechClient:
         self._flatBatterys = []
         self._redback_devices = []
         self._redback_entities = []
+        self._redback_device_info = []
     
     async def get_redback_data(self):
         """Get Redback Data."""
@@ -60,13 +62,14 @@ class RedbackTechClient:
         inverter_data: dict[str, Inverters] = {}
         battery_data: dict[str, Batterys] = {}
         entity_data: dict[str, RedbackEntitys] = {}
+        device_info_data: dict[str, DeviceInfo] = {}
         
         #if self._redback_devices is not None:
         #    for device in self._redback_devices:
         #        if device['device_type'] == 'inverter':
         #            in_instance, in_id = await self._handle_inverter(device)
         #            inverter_data[in_id] = in_instance
-        #            
+                    
         #        if device['device_type'] == 'battery':
         #            bat_instance, bat_id = await self._handle_battery(device)
         #            battery_data[bat_id] = bat_instance
@@ -75,11 +78,17 @@ class RedbackTechClient:
                 ent_instance, ent_id = await self._handle_entity(entity)
                 entity_data[ent_id] = ent_instance            
         
+        if self._redback_device_info is not None:
+            for device in self._redback_device_info:
+                device_instance, dev_id = await self._handle_device_info(device)
+                device_info_data[dev_id] = device_instance
+        
         return RedbackTechData(
             user_id = self.client_id,
             inverters = inverter_data,
             batterys = battery_data,
-            entities = entity_data
+            entities = entity_data,
+            devices = device_info_data
         )
         
     async def api_login(self) -> None:
@@ -130,6 +139,25 @@ class RedbackTechClient:
         if self._GAFToken is not None:
             return True 
         return False
+
+    async def set_inverter_schedule(self, serial_number: str, start_time: str, duration, inverter_mode, power_w) :
+        """Set inverter schedule."""
+        self.serial_number = serial_number
+        self.mode = inverter_mode
+        self.power = power_w
+        self.duration = duration
+        self.start_time = start_time
+        
+        self._check_token()
+        ### convert duration to format
+        days = int(duration/1440)
+        if days < 0:
+            days = 0
+        hours = int(duration/60)
+        minutes = int(duration - (hours * 60))
+        duration_str = f'{days}.{hours:2}:{minutes:2}'
+        
+        return
 
     async def set_inverter_mode(self, serial_number: str, mode: str, power: int, ross_version: str) -> dict[str, Any]:
         """Set inverter mode."""
@@ -274,12 +302,14 @@ class RedbackTechClient:
             #self._flatInverters = await self._convert_static_by_serial_to_inverter_list(response1, response2)
             #self._redback_devices.append(self._flatInverters)  ###
             await self._convert_responses_to_inverter_entities(response1, response2)
+            await self._create_device_info_inverter(response1)
             #print(self._flatInverters['serial_number'])
             #response = await self.create_dynamic_info()
             if response1['Data']['Nodes'][0]['StaticData']['BatteryCount'] > 0:
                 soc_data = await self.get_config_by_serial(response1['Data']['Nodes'][0]['StaticData']['Id'])
                 #self._flatBatterys = await self._convert_static_by_serial_to_battery_list(response1, response2, soc_data)
                 await self._convert_responses_to_battery_entities(response1, response2, soc_data)
+                await self._create_device_info_battery(response1)
             #self._redback_devices.append(self._flatBatterys)
         self._device_info_refresh_time = datetime.now() + timedelta(seconds=DEVICEINFOREFRESH)
         return 
@@ -414,6 +444,24 @@ class RedbackTechClient:
         dataDict['battery_currently_stored_kwh'] = (data['Data']['StaticData']['SiteDetails']['BatteryCapacitykWh'] * data2['Data']['BatterySoCInstantaneous0to1'] )
         dataDict['battery_currently_usable_kwh'] = round(data['Data']['StaticData']['SiteDetails']['BatteryCapacitykWh'] * (data2['Data']['BatterySoCInstantaneous0to1']- soc_data['Data']['MinSoC0to1']),2)
         return dataDict
+    
+    
+    async def _handle_device_info(self, device: dict[str, Any]) -> (DeviceInfo, str):
+        """Handle device info data."""
+        
+        #data = {
+        #    'id': device['serial_number'] + device['device_type']
+        #}
+        
+        device_instance = DeviceInfo(
+            identifiers=device['identifiers'],
+            name=device['name'],
+            model=device['model'],
+            sw_version=device['sw_version'],
+            hw_version=device['hw_version'],
+            serial_number=device['serial_number'],
+        )
+        return device_instance, device['identifiers']
         
     async def _handle_inverter(self, device: dict[str, Any]) -> (Inverters, str):
         """Handle inverter data."""
@@ -572,6 +620,28 @@ class RedbackTechClient:
             raise RedbackTechClientError(f'Could not return text {error}') from error
 
         return response
+
+    async def _create_device_info_inverter(self, data) -> None:
+        dataDict = {
+            'identifiers': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter',
+            'name': data['Data']['Nodes'][0]['StaticData']['ModelName'] + ' - inverter',
+            'model': data['Data']['Nodes'][0]['StaticData']['ModelName'],
+            'sw_version': data['Data']['Nodes'][0]['StaticData']['SoftwareVersion'],
+            'hw_version': data['Data']['Nodes'][0]['StaticData']['FirmwareVersion'],
+            'serial_number': data['Data']['Nodes'][0]['StaticData']['Id'],
+        }
+        self._redback_device_info.append(dataDict)
+    
+    async def _create_device_info_battery(self, data) -> None:
+        dataDict = {
+            'identifiers': data['Data']['Nodes'][0]['StaticData']['Id'] + 'battery',
+            'name': data['Data']['Nodes'][0]['StaticData']['ModelName'] + ' - battery',
+            'model': data['Data']['Nodes'][0]['StaticData']['ModelName'],
+            'sw_version': data['Data']['Nodes'][0]['StaticData']['SoftwareVersion'],
+            'hw_version': data['Data']['Nodes'][0]['StaticData']['FirmwareVersion'],
+            'serial_number': data['Data']['Nodes'][0]['StaticData']['Id'],
+        }
+        self._redback_device_info.append(dataDict)
 
     async def _convert_responses_to_inverter_entities(self, data, data2) -> None:
         """Convert responses to entities."""
