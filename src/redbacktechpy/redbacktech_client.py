@@ -424,7 +424,7 @@ class RedbackTechClient:
                 dataDict[f'battery_{batteryId}_model'] = batteryName
             else:
                 dataDict[f'battery_{batteryId}_model'] = batteryName
-            dataDict[f'battery_{batteryId}_current_negative_in_charging_a'] = data2['Data']['Battery']['Modules'][batteryId-1]['CurrentNegativeIsChargingA']
+            dataDict[f'battery_{batteryId}_current_negative_is_charging_a'] = data2['Data']['Battery']['Modules'][batteryId-1]['CurrentNegativeIsChargingA']
             dataDict[f'battery_{batteryId}_voltage_v'] =  data2['Data']['Battery']['Modules'][batteryId-1]['VoltageV']
             dataDict[f'battery_{batteryId}_power_negative_is_charging_kw'] =  data2['Data']['Battery']['Modules'][batteryId-1]['PowerNegativeIsChargingkW']
             dataDict[f'battery_{batteryId}_soc_0to1'] =  data2['Data']['Battery']['Modules'][batteryId-1]['SoC0To1']
@@ -440,7 +440,7 @@ class RedbackTechClient:
         dataDict['battery_charge_all_time_energy_kwh'] = data2['Data']['BatteryChargeAllTimeEnergykWh']
         dataDict['battery_discharge_all_time_energy_kwh'] = data2['Data']['BatteryDischargeAllTimeEnergykWh']
         dataDict['status'] = data2['Data']['Status']
-        dataDict['battery_current_negative_in_charging_a'] = data2['Data']['Battery']['CurrentNegativeIsChargingA']
+        dataDict['battery_current_negative_is_charging_a'] = data2['Data']['Battery']['CurrentNegativeIsChargingA']
         dataDict['battery_voltage_v'] = data2['Data']['Battery']['VoltageV']
         dataDict['battery_voltage_type'] = data2['Data']['Battery']['VoltageType']
         dataDict['battery_no_of_modules'] = data2['Data']['Battery']['NumberOfModules']
@@ -865,7 +865,7 @@ class RedbackTechClient:
         self._redback_entities.append(dataDict)
         dataDict = {'value': data2['Data']['Status'],'entity_name': 'status', 'device_id': id_temp, 'device_type': 'battery'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data2['Data']['Battery']['CurrentNegativeIsChargingA'],'entity_name': 'battery_current_negative_in_charging_a', 'device_id': id_temp, 'device_type': 'battery'}
+        dataDict = {'value': data2['Data']['Battery']['CurrentNegativeIsChargingA'],'entity_name': 'battery_current_negative_is_charging_a', 'device_id': id_temp, 'device_type': 'battery'}
         self._redback_entities.append(dataDict)
         dataDict = {'value': data2['Data']['Battery']['VoltageV'],'entity_name': 'battery_voltage_v', 'device_id': id_temp, 'device_type': 'battery'}
         self._redback_entities.append(dataDict)
