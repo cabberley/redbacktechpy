@@ -2,6 +2,7 @@
 from __future__ import annotations
 from aiohttp import ClientResponse, ClientSession
 from typing import Any
+from math import sqrt
 import asyncio
 from datetime import datetime, timedelta, timezone
 from bs4 import BeautifulSoup
@@ -53,6 +54,7 @@ class RedbackTechClient:
         self._redback_devices = []
         self._redback_entities = []
         self._redback_device_info = []
+        self._redback_site_load = 0
     
     async def get_redback_data(self):
         """Get Redback Data."""
@@ -64,15 +66,15 @@ class RedbackTechClient:
         entity_data: dict[str, RedbackEntitys] = {}
         device_info_data: dict[str, DeviceInfo] = {}
         
-        #if self._redback_devices is not None:
-        #    for device in self._redback_devices:
-        #        if device['device_type'] == 'inverter':
-        #            in_instance, in_id = await self._handle_inverter(device)
-        #            inverter_data[in_id] = in_instance
+        if self._redback_devices is not None:
+            for device in self._redback_devices:
+                if device['device_type'] == 'inverter':
+                    in_instance, in_id = await self._handle_inverter(device)
+                    inverter_data[in_id] = in_instance
                     
-        #        if device['device_type'] == 'battery':
-        #            bat_instance, bat_id = await self._handle_battery(device)
-        #            battery_data[bat_id] = bat_instance
+                if device['device_type'] == 'battery':
+                    bat_instance, bat_id = await self._handle_battery(device)
+                    battery_data[bat_id] = bat_instance
         if self._redback_entities is not None:
             for entity in self._redback_entities:
                 ent_instance, ent_id = await self._handle_entity(entity)
@@ -310,7 +312,9 @@ class RedbackTechClient:
                 #self._flatBatterys = await self._convert_static_by_serial_to_battery_list(response1, response2, soc_data)
                 await self._convert_responses_to_battery_entities(response1, response2, soc_data)
                 await self._create_device_info_battery(response1)
-            #self._redback_devices.append(self._flatBatterys)
+                #self._redback_devices.append(self._flatBatterys)
+            await self._add_site_load_to_entities(self._redback_site_load, response1)
+            await self._create_device_info_inverter(response1)
         self._device_info_refresh_time = datetime.now() + timedelta(seconds=DEVICEINFOREFRESH)
         return 
     
@@ -370,9 +374,9 @@ class RedbackTechClient:
         dataDict['power_mode_inverter_mode'] = data2['Data']['Inverters'][0]['PowerMode']['InverterMode']
         dataDict['power_mode_power_w'] = data2['Data']['Inverters'][0]['PowerMode']['PowerW']
         for pv in data2['Data']['PVs']:
-            dataDict[f'pv_{pvId}_current_a'] = pv['CurrentA']
-            dataDict[f'pv_{pvId}_voltage_v'] = pv['VoltageV']
-            dataDict[f'pv_{pvId}_power_kw'] = pv['PowerkW']
+            dataDict[f'mppt_{pvId}_current_a'] = pv['CurrentA']
+            dataDict[f'mppt_{pvId}_voltage_v'] = pv['VoltageV']
+            dataDict[f'mppt_{pvId}_power_kw'] = pv['PowerkW']
             pvId += 1
         for phase in data2['Data']['Phases']:  
             phaseAlpha=phase['Id']
@@ -420,7 +424,7 @@ class RedbackTechClient:
                 dataDict[f'battery_{batteryId}_model'] = batteryName
             else:
                 dataDict[f'battery_{batteryId}_model'] = batteryName
-            dataDict[f'battery_{batteryId}_current_negative_in_charging_a'] = data2['Data']['Battery']['Modules'][batteryId-1]['CurrentNegativeIsChargingA']
+            dataDict[f'battery_{batteryId}_current_negative_is_charging_a'] = data2['Data']['Battery']['Modules'][batteryId-1]['CurrentNegativeIsChargingA']
             dataDict[f'battery_{batteryId}_voltage_v'] =  data2['Data']['Battery']['Modules'][batteryId-1]['VoltageV']
             dataDict[f'battery_{batteryId}_power_negative_is_charging_kw'] =  data2['Data']['Battery']['Modules'][batteryId-1]['PowerNegativeIsChargingkW']
             dataDict[f'battery_{batteryId}_soc_0to1'] =  data2['Data']['Battery']['Modules'][batteryId-1]['SoC0To1']
@@ -436,7 +440,7 @@ class RedbackTechClient:
         dataDict['battery_charge_all_time_energy_kwh'] = data2['Data']['BatteryChargeAllTimeEnergykWh']
         dataDict['battery_discharge_all_time_energy_kwh'] = data2['Data']['BatteryDischargeAllTimeEnergykWh']
         dataDict['status'] = data2['Data']['Status']
-        dataDict['battery_current_negative_in_charging_a'] = data2['Data']['Battery']['CurrentNegativeIsChargingA']
+        dataDict['battery_current_negative_is_charging_a'] = data2['Data']['Battery']['CurrentNegativeIsChargingA']
         dataDict['battery_voltage_v'] = data2['Data']['Battery']['VoltageV']
         dataDict['battery_voltage_type'] = data2['Data']['Battery']['VoltageType']
         dataDict['battery_no_of_modules'] = data2['Data']['Battery']['NumberOfModules']
@@ -507,7 +511,8 @@ class RedbackTechClient:
         }
                
         entity_instance = RedbackEntitys(
-            entity_id=entity['entity_name'],
+            #entity_id=entity['entity_name'],
+            entity_id=data['id'],
             device_id=entity['device_id'],
             type=entity['device_type'],
             data=entity,
@@ -622,8 +627,11 @@ class RedbackTechClient:
         return response
 
     async def _create_device_info_inverter(self, data) -> None:
+        id_temp = data['Data']['Nodes'][0]['StaticData']['Id']
+        id_temp = id_temp[-4:] + 'inv'
+        id_temp = id_temp.lower()
         dataDict = {
-            'identifiers': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter',
+            'identifiers': id_temp, #data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter',
             'name': data['Data']['Nodes'][0]['StaticData']['ModelName'] + ' - inverter',
             'model': data['Data']['Nodes'][0]['StaticData']['ModelName'],
             'sw_version': data['Data']['Nodes'][0]['StaticData']['SoftwareVersion'],
@@ -633,8 +641,11 @@ class RedbackTechClient:
         self._redback_device_info.append(dataDict)
     
     async def _create_device_info_battery(self, data) -> None:
+        id_temp = data['Data']['Nodes'][0]['StaticData']['Id']
+        id_temp = id_temp[-4:] + 'bat'
+        id_temp = id_temp.lower()
         dataDict = {
-            'identifiers': data['Data']['Nodes'][0]['StaticData']['Id'] + 'battery',
+            'identifiers': id_temp, #data['Data']['Nodes'][0]['StaticData']['Id'] + 'battery',
             'name': data['Data']['Nodes'][0]['StaticData']['ModelName'] + ' - battery',
             'model': data['Data']['Nodes'][0]['StaticData']['ModelName'],
             'sw_version': data['Data']['Nodes'][0]['StaticData']['SoftwareVersion'],
@@ -646,209 +657,281 @@ class RedbackTechClient:
     async def _convert_responses_to_inverter_entities(self, data, data2) -> None:
         """Convert responses to entities."""
         pvId =1
+        id_temp = data['Data']['Nodes'][0]['StaticData']['Id']
+        id_temp = id_temp[-4:] + 'inv'
+        id_temp = id_temp.lower()
         #entity_name
-        dataDict = {'value': data['Data']['Nodes'][0]['StaticData']['ModelName'], 'entity_name': 'model_name', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter', 'type_set': 'sensor.string' }
+        dataDict = {'value': data['Data']['Nodes'][0]['StaticData']['ModelName'], 'entity_name': 'model_name', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'sensor.string' }
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data['Data']['Nodes'][0]['StaticData']['Id'], 'entity_name': 'serial_number', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter', 'type_set': 'sensor.string' }
+        dataDict = {'value': data['Data']['Nodes'][0]['StaticData']['Id'], 'entity_name': 'serial_number', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'sensor.string' }
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data['Data']['StaticData']['Location']['Latitude'], 'entity_name': 'latitude', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter', 'type_set': 'sensor.string' }
+        dataDict = {'value': data['Data']['StaticData']['Location']['Latitude'], 'entity_name': 'latitude', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'sensor.string' }
         self._redback_entities.append(dataDict)
-        dataDict = { 'value': data['Data']['StaticData']['Location']['Latitude'], 'entity_name': 'latitude', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter', 'type_set': 'sensor.string' }
+        dataDict = { 'value': data['Data']['StaticData']['Location']['Longitude'], 'entity_name': 'longitude', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'sensor.string' }
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data['Data']['StaticData']['RemoteAccessConnection']['Type'],'entity_name': 'network_connection', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter'}
+        dataDict = {'value': data['Data']['StaticData']['RemoteAccessConnection']['Type'],'entity_name': 'network_connection', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data['Data']['StaticData']['ApprovedCapacityW'],'entity_name': 'approved_capacity', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter'}
+        dataDict = {'value': data['Data']['StaticData']['ApprovedCapacityW'],'entity_name': 'approved_capacity_w', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data['Data']['StaticData']['SiteDetails']['GenerationHardLimitVA'],'entity_name': 'generation_hard_limit_va', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter'}
+        dataDict = {'value': data['Data']['StaticData']['SiteDetails']['GenerationHardLimitVA'],'entity_name': 'generation_hard_limit_va', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data['Data']['StaticData']['SiteDetails']['GenerationSoftLimitVA'],'entity_name': 'generation_soft_limit_va', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter'}
+        dataDict = {'value': data['Data']['StaticData']['SiteDetails']['GenerationSoftLimitVA'],'entity_name': 'generation_soft_limit_va', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data['Data']['StaticData']['SiteDetails']['ExportHardLimitkW'],'entity_name': 'export_hard_limit_kw', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter'}
+        dataDict = {'value': data['Data']['StaticData']['SiteDetails']['ExportHardLimitkW'],'entity_name': 'export_hard_limit_kw', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data['Data']['StaticData']['SiteDetails']['ExportSoftLimitkW'],'entity_name': 'export_soft_limit_kw', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter'}
+        dataDict = {'value': data['Data']['StaticData']['SiteDetails']['ExportSoftLimitkW'],'entity_name': 'export_soft_limit_kw', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data['Data']['StaticData']['SiteDetails']['SiteExportLimitkW'],'entity_name': 'site_export_limit_kw', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter'}
+        dataDict = {'value': data['Data']['StaticData']['SiteDetails']['SiteExportLimitkW'],'entity_name': 'site_export_limit_kw', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data['Data']['StaticData']['SiteDetails']['PanelModel'],'entity_name': 'pv_panel_model', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter'}
+        dataDict = {'value': data['Data']['StaticData']['SiteDetails']['PanelModel'],'entity_name': 'pv_panel_model', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data['Data']['StaticData']['SiteDetails']['PanelSizekW'],'entity_name': 'pv_panel_size_kw', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter'}
+        dataDict = {'value': data['Data']['StaticData']['SiteDetails']['PanelSizekW'],'entity_name': 'pv_panel_size_kw', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data['Data']['StaticData']['SiteDetails']['SystemType'],'entity_name': 'system_type', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter'}
+        dataDict = {'value': data['Data']['StaticData']['SiteDetails']['SystemType'],'entity_name': 'system_type', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data['Data']['StaticData']['SiteDetails']['InverterMaxExportPowerkW'],'entity_name': 'inverter_max_export_power_kw', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter'}
+        dataDict = {'value': data['Data']['StaticData']['SiteDetails']['InverterMaxExportPowerkW'],'entity_name': 'inverter_max_export_power_kw', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data['Data']['StaticData']['SiteDetails']['InverterMaxImportPowerkW'],'entity_name': 'inverter_max_import_power_kw', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter'}
+        dataDict = {'value': data['Data']['StaticData']['SiteDetails']['InverterMaxImportPowerkW'],'entity_name': 'inverter_max_import_power_kw', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data['Data']['StaticData']['CommissioningDate'],'entity_name': 'commissioning_date', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter'}
+        dataDict = {'value': data['Data']['StaticData']['CommissioningDate'],'entity_name': 'commissioning_date', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data['Data']['Nodes'][0]['StaticData']['ModelName'],'entity_name': 'model_name', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter'}
+        #dataDict = {'value': data['Data']['Nodes'][0]['StaticData']['ModelName'],'entity_name': 'model_name', 'device_id': id_temp, 'device_type': 'inverter'}
+        #self._redback_entities.append(dataDict)
+        dataDict = {'value': data['Data']['StaticData']['NMI'],'entity_name': 'nmi', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data['Data']['StaticData']['NMI'],'entity_name': 'nmi', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter'}
+        dataDict = {'value': data['Data']['StaticData']['Id'],'entity_name': 'site_id', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data['Data']['StaticData']['Id'],'entity_name': 'site_id', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter'}
+        dataDict = {'value': data['Data']['StaticData']['Type'],'entity_name': 'inverter_site_type', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data['Data']['StaticData']['Type'],'entity_name': 'inverter_site_type', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter'}
+        dataDict = {'value': data['Data']['Nodes'][0]['StaticData']['BatteryCount'],'entity_name': 'battery_count', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data['Data']['Nodes'][0]['StaticData']['BatteryCount'],'entity_name': 'battery_count', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter'}
+        dataDict = {'value': data['Data']['Nodes'][0]['StaticData']['SoftwareVersion'],'entity_name': 'software_version', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data['Data']['Nodes'][0]['StaticData']['SoftwareVersion'],'entity_name': 'software_version', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter'}
+        dataDict = {'value': data['Data']['Nodes'][0]['StaticData']['FirmwareVersion'],'entity_name': 'firmware_version', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data['Data']['Nodes'][0]['StaticData']['FirmwareVersion'],'entity_name': 'firmware_version', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter'}
+        #dataDict = {'value': data['Data']['Nodes'][0]['StaticData']['Id'],'entity_name': 'inverter_serial_number', 'device_id': id_temp, 'device_type': 'inverter'}
+        #self._redback_entities.append(dataDict)
+        dataDict = {'value': datetime.fromisoformat((data2['Data']['TimestampUtc']).replace('Z','+00:00')).replace(tzinfo=timezone.utc).astimezone(timezone.utc).isoformat(),'entity_name': 'timestamp_utc', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data['Data']['Nodes'][0]['StaticData']['Id'],'entity_name': 'inverter_serial_number', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter'}
+        dataDict = {'value': data2['Data']['FrequencyInstantaneousHz'],'entity_name': 'frequency_instantaneous', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data2['Data']['TimestampUtc'],'entity_name': 'timestamp_utc', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter'}
+        dataDict = {'value': data2['Data']['PvPowerInstantaneouskW'],'entity_name': 'pv_power_instantaneous_kw', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data2['Data']['FrequencyInstantaneousHz'],'entity_name': 'frequency_instantaneous', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter'}
+        dataDict = {'value': data2['Data']['InverterTemperatureC'],'entity_name': 'inverter_temperature_c', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data2['Data']['PvPowerInstantaneouskW'],'entity_name': 'pv_power_instantaneous_kw', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter'}
+        if data2['Data']['PvAllTimeEnergykWh'] != None:
+            dataDict = {'value': (data2['Data']['PvAllTimeEnergykWh'])/1000,'entity_name': 'pv_all_time_energy_mwh', 'device_id': id_temp, 'device_type': 'inverter'}
+        else:
+            dataDict = {'value': data2['Data']['PvAllTimeEnergykWh'],'entity_name': 'pv_all_time_energy_mwh', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data2['Data']['InverterTemperatureC'],'entity_name': 'inverter_temperature_c', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter'}
+        if data2['Data']['ExportAllTimeEnergykWh'] != None:
+            dataDict = {'value': (data2['Data']['ExportAllTimeEnergykWh'])/1000,'entity_name': 'export_all_time_energy_mwh', 'device_id': id_temp, 'device_type': 'inverter'}
+        else:
+            dataDict = {'value': data2['Data']['ExportAllTimeEnergykWh'],'entity_name': 'export_all_time_energy_mwh', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data2['Data']['PvAllTimeEnergykWh'],'entity_name': 'pv_all_time_energy_kwh', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter'}
+        if data2['Data']['ImportAllTimeEnergykWh'] != None:
+            dataDict = {'value': (data2['Data']['ImportAllTimeEnergykWh'])/1000,'entity_name': 'import_all_time_energy_mwh', 'device_id': id_temp, 'device_type': 'inverter'}
+        else:
+            dataDict = {'value': data2['Data']['ImportAllTimeEnergykWh'],'entity_name': 'import_all_time_energy_mwh', 'device_id': id_temp, 'device_type': 'inverter'}  
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data2['Data']['ExportAllTimeEnergykWh'],'entity_name': 'export_all_time_energy_kwh', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter'}
+        if data2['Data']['LoadAllTimeEnergykWh'] != None:
+            dataDict = {'value': (data2['Data']['LoadAllTimeEnergykWh'])/1000,'entity_name': 'load_all_time_energy_mwh', 'device_id': id_temp, 'device_type': 'inverter'}   
+        else:
+            dataDict = {'value': data2['Data']['LoadAllTimeEnergykWh'],'entity_name': 'load_all_time_energy_mwh', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data2['Data']['ImportAllTimeEnergykWh'],'entity_name': 'import_all_time_energy_kwh', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter'}
+        dataDict = {'value': data2['Data']['Status'],'entity_name': 'status', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data2['Data']['LoadAllTimeEnergykWh'],'entity_name': 'load_all_time_energy_kwh', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter'}
+        dataDict = {'value': data2['Data']['Inverters'][0]['PowerMode']['InverterMode'],'entity_name': 'power_mode_inverter_mode', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data2['Data']['Status'],'entity_name': 'status', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter'}
+        dataDict = {'value': data2['Data']['Inverters'][0]['PowerMode']['PowerW'],'entity_name': 'power_mode_power_w', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data2['Data']['Inverters'][0]['PowerMode']['InverterMode'],'entity_name': 'power_mode_inverter_mode', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter'}
-        self._redback_entities.append(dataDict)
-        dataDict = {'value': data2['Data']['Inverters'][0]['PowerMode']['PowerW'],'entity_name': 'power_mode_power_w', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter'}
-        self._redback_entities.append(dataDict)
+
+        
         for pv in data2['Data']['PVs']:
-            entity_name_temp = f'pv_{pvId}_current_a'
-            dataDict = {'value': pv['CurrentA'],'entity_name': entity_name_temp, 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter'}
+            
+            entity_name_temp = f'mppt_{pvId}_current_a'
+            dataDict = {'value': pv['CurrentA'],'entity_name': entity_name_temp, 'device_id': id_temp, 'device_type': 'inverter'}
             self._redback_entities.append(dataDict)
-            entity_name_temp = f'pv_{pvId}_voltage_v'
-            dataDict = {'value': pv['VoltageV'],'entity_name': entity_name_temp, 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter'}
+            entity_name_temp = f'mppt_{pvId}_voltage_v'
+            dataDict = {'value': pv['VoltageV'],'entity_name': entity_name_temp, 'device_id': id_temp, 'device_type': 'inverter'}
             self._redback_entities.append(dataDict)
-            entity_name_temp = f'pv_{pvId}_power_kw'
-            dataDict = {'value': pv['PowerkW'],'entity_name': entity_name_temp, 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter'}
+            entity_name_temp = f'mppt_{pvId}_power_kw'
+            dataDict = {'value': pv['PowerkW'],'entity_name': entity_name_temp, 'device_id': id_temp, 'device_type': 'inverter'}
             self._redback_entities.append(dataDict)
             pvId += 1
+        phase_count = 0
+        phase_voltage_sum = 0
+        phase_Current_sum = 0
+        phase_power_exported_sum = 0
+        phase_power_imported_sum = 0
+        phase_power_net_sum = 0
         for phase in data2['Data']['Phases']:  
-            phaseAlpha=phase['Id']
+            if phase['VoltageInstantaneousV'] != None:
+                phase_count += 1
+                phase_voltage_sum += phase['VoltageInstantaneousV']
+                phase_Current_sum += phase['CurrentInstantaneousA']
+                phase_power_exported_sum += phase['ActiveExportedPowerInstantaneouskW']
+                phase_power_imported_sum += phase['ActiveImportedPowerInstantaneouskW'] 
+                phase_power_net_sum += phase['ActiveImportedPowerInstantaneouskW'] - phase['ActiveExportedPowerInstantaneouskW']
+            phaseAlpha=phase['Id'].lower()
             entity_name_temp = f'inverter_phase_{phaseAlpha}_active_exported_power_instantaneous_kw'
-            dataDict = {'value': phase['ActiveExportedPowerInstantaneouskW'],'entity_name': entity_name_temp, 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter'}
+            dataDict = {'value': phase['ActiveExportedPowerInstantaneouskW'],'entity_name': entity_name_temp, 'device_id': id_temp, 'device_type': 'inverter'}
             self._redback_entities.append(dataDict)
             entity_name_temp = f'inverter_phase_{phaseAlpha}_active_imported_power_instantaneous_kw'
-            dataDict = {'value': phase['ActiveImportedPowerInstantaneouskW'],'entity_name': entity_name_temp, 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter'}
+            dataDict = {'value': phase['ActiveImportedPowerInstantaneouskW'],'entity_name': entity_name_temp, 'device_id': id_temp, 'device_type': 'inverter'}
+            self._redback_entities.append(dataDict)
+            entity_name_temp = f'inverter_phase_{phaseAlpha}_active_net_power_instantaneous_kw'
+            dataDict = {'value': phase['ActiveImportedPowerInstantaneouskW'] - phase['ActiveExportedPowerInstantaneouskW'],'entity_name': entity_name_temp, 'device_id': id_temp, 'device_type': 'inverter'}
             self._redback_entities.append(dataDict)
             entity_name_temp = f'inverter_phase_{phaseAlpha}_voltage_instantaneous_v'
-            dataDict = {'value': phase['VoltageInstantaneousV'],'entity_name': entity_name_temp, 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter'}
+            dataDict = {'value': phase['VoltageInstantaneousV'],'entity_name': entity_name_temp, 'device_id': id_temp, 'device_type': 'inverter'}
             self._redback_entities.append(dataDict)
             entity_name_temp = f'inverter_phase_{phaseAlpha}_current_instantaneous_a'
-            dataDict = {'value': phase['CurrentInstantaneousA'],'entity_name': entity_name_temp, 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter'}
+            dataDict = {'value': phase['CurrentInstantaneousA'],'entity_name': entity_name_temp, 'device_id': id_temp, 'device_type': 'inverter'}
             self._redback_entities.append(dataDict)
             entity_name_temp = f'inverter_phase_{phaseAlpha}_power_factor_instantaneous_minus_1to1'
-            dataDict = {'value': phase['PowerFactorInstantaneousMinus1to1'],'entity_name': entity_name_temp, 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'inverter', 'device_type': 'inverter'}
+            dataDict = {'value': phase['PowerFactorInstantaneousMinus1to1'],'entity_name': entity_name_temp, 'device_id': id_temp, 'device_type': 'inverter'}
             self._redback_entities.append(dataDict)
-
+        dataDict = {'value': round( phase_voltage_sum / phase_count * sqrt(phase_count), 1), 'entity_name': 'inverter_phase_total_voltage_instantaneous_v', 'device_id': id_temp, 'device_type': 'inverter'}
+        self._redback_entities.append(dataDict)
+        dataDict = {'value': phase_Current_sum, 'entity_name': 'inverter_phase_total_current_instantaneous_a', 'device_id': id_temp, 'device_type': 'inverter'}
+        self._redback_entities.append(dataDict)
+        dataDict = {'value': phase_power_exported_sum, 'entity_name': 'inverter_phase_total_active_exported_power_instantaneous_kw', 'device_id': id_temp, 'device_type': 'inverter'} 
+        self._redback_entities.append(dataDict)
+        dataDict = {'value': phase_power_imported_sum, 'entity_name': 'inverter_phase_total_active_imported_power_instantaneous_kw', 'device_id': id_temp, 'device_type': 'inverter'}
+        self._redback_entities.append(dataDict)
+        dataDict = {'value': round(phase_power_net_sum,3), 'entity_name': 'inverter_phase_total_active_net_power_instantaneous_kw', 'device_id': id_temp, 'device_type': 'inverter'}
+        self._redback_entities.append(dataDict)
+        
+        self._redback_site_load = phase_power_net_sum + data2['Data']['PvPowerInstantaneouskW']
+        return
+        
     async def _convert_responses_to_battery_entities(self, data, data2, soc_data) -> None:
         batteryName = 'Unknown'
         batteryId = 1
         cabinetId = 1
-        dataDict = {'value': data['Data']['Nodes'][0]['StaticData']['Id'],'entity_name': 'serial_number', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'battery', 'device_type': 'battery'}
+        id_temp = data['Data']['Nodes'][0]['StaticData']['Id']
+        id_temp = id_temp[-4:] + 'bat'
+        id_temp = id_temp.lower()
+        dataDict = {'value': (soc_data['Data']['MinSoC0to1'])*100,'entity_name': 'min_soc_0_to_1', 'device_id': id_temp, 'device_type': 'battery'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data['Data']['Nodes'][0]['StaticData']['ModelName'],'entity_name': 'model', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'battery', 'device_type': 'battery'}
+        dataDict = {'value': (soc_data['Data']['MinOffgridSoC0to1'])*100,'entity_name': 'min_Offgrid_soc_0_to_1', 'device_id': id_temp, 'device_type': 'battery'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': soc_data['Data']['MinSoC0to1'],'entity_name': 'min_soc_0_to_1', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'battery', 'device_type': 'battery'}
+        dataDict = {'value': data['Data']['StaticData']['Location']['Latitude'],'entity_name': 'latitude', 'device_id': id_temp, 'device_type': 'battery'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': soc_data['Data']['MinOffgridSoC0to1'],'entity_name': 'min_Offgrid_soc_0_to_1', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'battery', 'device_type': 'battery'}
+        dataDict = {'value': data['Data']['StaticData']['Location']['Longitude'],'entity_name': 'longitude', 'device_id': id_temp, 'device_type': 'battery'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data['Data']['StaticData']['Location']['Latitude'],'entity_name': 'latitude', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'battery', 'device_type': 'battery'}
+        dataDict = {'value': data['Data']['StaticData']['SiteDetails']['BatteryMaxChargePowerkW'],'entity_name': 'battery_max_charge_power_kw', 'device_id': id_temp, 'device_type': 'battery'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data['Data']['StaticData']['Location']['Longitude'],'entity_name': 'longitude', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'battery', 'device_type': 'battery'}
+        dataDict = {'value': data['Data']['StaticData']['SiteDetails']['BatteryMaxDischargePowerkW'],'entity_name': 'battery_max_discharge_power_kw', 'device_id': id_temp, 'device_type': 'battery'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data['Data']['StaticData']['SiteDetails']['BatteryMaxChargePowerkW'],'entity_name': 'battery_max_charge_power_kw', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'battery', 'device_type': 'battery'}
+        dataDict = {'value': data['Data']['StaticData']['SiteDetails']['BatteryCapacitykWh'],'entity_name': 'battery_capacity_kwh', 'device_id': id_temp, 'device_type': 'battery'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data['Data']['StaticData']['SiteDetails']['BatteryMaxDischargePowerkW'],'entity_name': 'battery_max_discharge_power_kw', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'battery', 'device_type': 'battery'}
+        dataDict = {'value': data['Data']['StaticData']['SiteDetails']['UsableBatteryCapacitykWh'],'entity_name': 'battery_usable_capacity_kwh', 'device_id': id_temp, 'device_type': 'battery'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data['Data']['StaticData']['SiteDetails']['BatteryCapacitykWh'],'entity_name': 'battery_capacity_kwh', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'battery', 'device_type': 'battery'}
+        dataDict = {'value': data['Data']['StaticData']['SiteDetails']['SystemType'],'entity_name': 'system_type', 'device_id': id_temp, 'device_type': 'battery'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data['Data']['StaticData']['SiteDetails']['UsableBatteryCapacitykWh'],'entity_name': 'battery_usable_capacity_kwh', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'battery', 'device_type': 'battery'}
+        dataDict = {'value': data['Data']['StaticData']['CommissioningDate'],'entity_name': 'commissioning_date', 'device_id': id_temp, 'device_type': 'battery'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data['Data']['StaticData']['SiteDetails']['SystemType'],'entity_name': 'system_type', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'battery', 'device_type': 'battery'}
+        dataDict = {'value': data['Data']['StaticData']['Id'],'entity_name': 'site_id', 'device_id': id_temp, 'device_type': 'battery'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data['Data']['StaticData']['CommissioningDate'],'entity_name': 'commissioning_date', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'battery', 'device_type': 'battery'}
+        dataDict = {'value': data['Data']['StaticData']['Type'],'entity_name': 'inverter_site_type', 'device_id': id_temp, 'device_type': 'battery'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data['Data']['StaticData']['Id'],'entity_name': 'site_id', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'battery', 'device_type': 'battery'}
+        dataDict = {'value': data['Data']['Nodes'][0]['StaticData']['ModelName'],'entity_name': 'model_name', 'device_id': id_temp, 'device_type': 'battery'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data['Data']['StaticData']['Type'],'entity_name': 'inverter_site_type', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'battery', 'device_type': 'battery'}
+        dataDict = {'value': data['Data']['Nodes'][0]['StaticData']['BatteryCount'],'entity_name': 'battery_count', 'device_id': id_temp, 'device_type': 'battery'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data['Data']['Nodes'][0]['StaticData']['ModelName'],'entity_name': 'model_name', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'battery', 'device_type': 'battery'}
+        dataDict = {'value': data['Data']['Nodes'][0]['StaticData']['SoftwareVersion'],'entity_name': 'software_version', 'device_id': id_temp, 'device_type': 'battery'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data['Data']['Nodes'][0]['StaticData']['BatteryCount'],'entity_name': 'battery_count', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'battery', 'device_type': 'battery'}
+        dataDict = {'value': data['Data']['Nodes'][0]['StaticData']['FirmwareVersion'],'entity_name': 'firmware_version', 'device_id': id_temp, 'device_type': 'battery'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data['Data']['Nodes'][0]['StaticData']['SoftwareVersion'],'entity_name': 'software_version', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'battery', 'device_type': 'battery'}
+        dataDict = {'value': data['Data']['Nodes'][0]['StaticData']['Id'],'entity_name': 'inverter_serial_number', 'device_id': id_temp, 'device_type': 'battery'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data['Data']['Nodes'][0]['StaticData']['FirmwareVersion'],'entity_name': 'firmware_version', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'battery', 'device_type': 'battery'}
+        dataDict = {'value': datetime.fromisoformat((data2['Data']['TimestampUtc']).replace('Z','+00:00')).replace(tzinfo=timezone.utc).astimezone(timezone.utc).isoformat(),'entity_name': 'timestamp_utc', 'device_id': id_temp, 'device_type': 'battery'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data['Data']['Nodes'][0]['StaticData']['Id'],'entity_name': 'inverter_serial_number', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'battery', 'device_type': 'battery'}
+        dataDict = {'value': (data2['Data']['BatterySoCInstantaneous0to1'])*100,'entity_name': 'battery_soc_instantaneous_0to1', 'device_id': id_temp, 'device_type': 'battery'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data2['Data']['TimestampUtc'],'entity_name': 'timestamp_utc', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'battery', 'device_type': 'battery'}
+        dataDict = {'value': data2['Data']['BatteryPowerNegativeIsChargingkW'],'entity_name': 'battery_power_negative_is_charging_kw', 'device_id': id_temp, 'device_type': 'battery'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data2['Data']['BatterySoCInstantaneous0to1'],'entity_name': 'battery_soc_instantaneous_0to1', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'battery', 'device_type': 'battery'}
+        if data2['Data']['BatteryChargeAllTimeEnergykWh'] is not None:
+            dataDict = {'value': (data2['Data']['BatteryChargeAllTimeEnergykWh'])/1000,'entity_name': 'battery_charge_all_time_energy_mwh', 'device_id': id_temp, 'device_type': 'battery'}
+        else:
+            dataDict = {'value': data2['Data']['BatteryChargeAllTimeEnergykWh'],'entity_name': 'battery_charge_all_time_energy_mwh', 'device_id': id_temp, 'device_type': 'battery'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data2['Data']['BatteryPowerNegativeIsChargingkW'],'entity_name': 'battery_power_negative_is_charging_kw', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'battery', 'device_type': 'battery'}
+        if data2['Data']['BatteryDischargeAllTimeEnergykWh'] is not None:
+            dataDict = {'value': (data2['Data']['BatteryDischargeAllTimeEnergykWh'])/1000,'entity_name': 'battery_discharge_all_time_energy_mwh', 'device_id': id_temp, 'device_type': 'battery'}
+        else:
+            dataDict = {'value': data2['Data']['BatteryDischargeAllTimeEnergykWh'],'entity_name': 'battery_discharge_all_time_energy_mwh', 'device_id': id_temp, 'device_type': 'battery'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data2['Data']['BatteryChargeAllTimeEnergykWh'],'entity_name': 'battery_charge_all_time_energy_kwh', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'battery', 'device_type': 'battery'}
+        dataDict = {'value': data2['Data']['Status'],'entity_name': 'status', 'device_id': id_temp, 'device_type': 'battery'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data2['Data']['BatteryDischargeAllTimeEnergykWh'],'entity_name': 'battery_discharge_all_time_energy_kwh', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'battery', 'device_type': 'battery'}
+        dataDict = {'value': data2['Data']['Battery']['CurrentNegativeIsChargingA'],'entity_name': 'battery_current_negative_is_charging_a', 'device_id': id_temp, 'device_type': 'battery'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data2['Data']['Status'],'entity_name': 'status', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'battery', 'device_type': 'battery'}
+        dataDict = {'value': data2['Data']['Battery']['VoltageV'],'entity_name': 'battery_voltage_v', 'device_id': id_temp, 'device_type': 'battery'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data2['Data']['Battery']['CurrentNegativeIsChargingA'],'entity_name': 'battery_current_negative_in_charging_a', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'battery', 'device_type': 'battery'}
+        dataDict = {'value': data2['Data']['Battery']['VoltageType'],'entity_name': 'battery_voltage_type', 'device_id': id_temp, 'device_type': 'battery'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value': data2['Data']['Battery']['VoltageV'],'entity_name': 'battery_voltage_v', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'battery', 'device_type': 'battery'}
-        self._redback_entities.append(dataDict)
-        dataDict = {'value': data2['Data']['Battery']['VoltageType'],'entity_name': 'battery_voltage_type', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'battery', 'device_type': 'battery'}
-        self._redback_entities.append(dataDict)
-        dataDict = {'value': data2['Data']['Battery']['NumberOfModules'],'entity_name': 'battery_no_of_modules', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'battery', 'device_type': 'battery'}
+        dataDict = {'value': data2['Data']['Battery']['NumberOfModules'],'entity_name': 'battery_no_of_modules', 'device_id': id_temp, 'device_type': 'battery'}
         self._redback_entities.append(dataDict)
         
-        dataDict = {'value':(data['Data']['StaticData']['SiteDetails']['BatteryCapacitykWh'] * data2['Data']['BatterySoCInstantaneous0to1'] ),'entity_name': 'battery_currently_stored_kwh', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'battery', 'device_type': 'battery'}
+        dataDict = {'value':(data['Data']['StaticData']['SiteDetails']['BatteryCapacitykWh'] * data2['Data']['BatterySoCInstantaneous0to1'] ),'entity_name': 'battery_currently_stored_kwh', 'device_id': id_temp, 'device_type': 'battery'}
         self._redback_entities.append(dataDict)
-        dataDict = {'value':  round(data['Data']['StaticData']['SiteDetails']['BatteryCapacitykWh'] * (data2['Data']['BatterySoCInstantaneous0to1']- soc_data['Data']['MinSoC0to1']),2),'entity_name': 'battery_currently_usable_kwh', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'battery', 'device_type': 'battery'}
+        dataDict = {'value':  round(data['Data']['StaticData']['SiteDetails']['BatteryCapacitykWh'] * (data2['Data']['BatterySoCInstantaneous0to1']- soc_data['Data']['MinSoC0to1']),2),'entity_name': 'battery_currently_usable_kwh', 'device_id': id_temp, 'device_type': 'battery'}
         self._redback_entities.append(dataDict)
+        battery_current_a = 0
+        battery_power_kw = 0
         for battery in data['Data']['Nodes'][0]['StaticData']['BatteryModels']:
             if battery != 'Unknown':
                 batteryName = battery
-                dataDict = {'value': batteryName,'entity_name': f'battery_{batteryId}_model', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'battery', 'device_type': 'battery'}
+                dataDict = {'value': batteryName,'entity_name': f'battery_{batteryId}_model', 'device_id': id_temp, 'device_type': 'battery'}
                 self._redback_entities.append(dataDict)
             else:
-                dataDict = {'value': batteryName,'entity_name': f'battery_{batteryId}_model', 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'battery', 'device_type': 'battery'}
+                dataDict = {'value': batteryName,'entity_name': f'battery_{batteryId}_model', 'device_id': id_temp, 'device_type': 'battery'}
                 self._redback_entities.append(dataDict)
             battery_temp_value = data2['Data']['Battery']['Modules'][batteryId-1]['CurrentNegativeIsChargingA']
-            battery_temp_name= f'battery_{batteryId}_current_negative_in_charging_a'
-            dataDict = {'value': battery_temp_value,'entity_name': battery_temp_name, 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'battery', 'device_type': 'battery'}
+            battery_current_a += battery_temp_value
+            battery_temp_name= f'battery_{batteryId}_current_negative_is_charging_a'
+            dataDict = {'value': battery_temp_value,'entity_name': battery_temp_name, 'device_id': id_temp, 'device_type': 'battery'}
             self._redback_entities.append(dataDict)
+            
             battery_temp_value = data2['Data']['Battery']['Modules'][batteryId-1]['VoltageV']
             battery_temp_name= f'battery_{batteryId}_voltage_v'
-            dataDict = {'value': battery_temp_value,'entity_name': battery_temp_name, 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'battery', 'device_type': 'battery'}
+            dataDict = {'value': battery_temp_value,'entity_name': battery_temp_name, 'device_id': id_temp, 'device_type': 'battery'}
             self._redback_entities.append(dataDict)
-            battery_temp_value = data2['Data']['Battery']['Modules'][batteryId-1]['VoltageV']
-            battery_temp_name= f'battery_{batteryId}_power_negative_is_charging_kw'
-            dataDict = {'value': battery_temp_value,'entity_name': battery_temp_name, 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'battery', 'device_type': 'battery'}
-            self._redback_entities.append(dataDict)
+            
             battery_temp_value = data2['Data']['Battery']['Modules'][batteryId-1]['PowerNegativeIsChargingkW']
+            battery_power_kw += battery_temp_value
+            battery_temp_name= f'battery_{batteryId}_power_negative_is_charging_kw'
+            dataDict = {'value': battery_temp_value,'entity_name': battery_temp_name, 'device_id': id_temp, 'device_type': 'battery'}
+            self._redback_entities.append(dataDict)
+            
+            battery_temp_value = (data2['Data']['Battery']['Modules'][batteryId-1]['SoC0To1'])*100
             battery_temp_name= f'battery_{batteryId}_soc_0to1'
-            dataDict = {'value': battery_temp_value,'entity_name': battery_temp_name, 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'battery', 'device_type': 'battery'}
+            dataDict = {'value': battery_temp_value,'entity_name': battery_temp_name, 'device_id': id_temp, 'device_type': 'battery'}
             self._redback_entities.append(dataDict)
             batteryId += 1
+            
+        dataDict = {'value': battery_current_a,'entity_name': 'battery_current_negative_is_charging_a', 'device_id': id_temp, 'device_type': 'battery'}
+        self._redback_entities.append(dataDict)
         
         for cabinet in data2['Data']['Battery']['Cabinets']:
-            cabinet_temp_name = f'battery_cabinet_{cabinetId}_id'
-            dataDict = {'value': cabinet['TemperatureC'],'entity_name': cabinet_temp_name, 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'battery', 'device_type': 'battery'}
+            cabinet_temp_name = f'battery_cabinet_{cabinetId}_temperature_c'
+            dataDict = {'value': cabinet['TemperatureC'],'entity_name': cabinet_temp_name, 'device_id': id_temp, 'device_type': 'battery'}
             self._redback_entities.append(dataDict)
             cabinet_temp_name = f'battery_cabinet_{cabinetId}_fan_state'
-            dataDict = {'value': cabinet['FanState'],'entity_name': cabinet_temp_name, 'device_id': data['Data']['Nodes'][0]['StaticData']['Id'] + 'battery', 'device_type': 'battery'}
+            dataDict = {'value': cabinet['FanState'],'entity_name': cabinet_temp_name, 'device_id': id_temp, 'device_type': 'battery'}
             self._redback_entities.append(dataDict)
             cabinetId += 1
-            
+        
+        self._redback_site_load += data2['Data']['BatteryPowerNegativeIsChargingkW']
+        return
+    
+    async def _add_site_load_to_entities(self, site_load_data, data):
+        id_temp = data['Data']['Nodes'][0]['StaticData']['Id']
+        id_temp = id_temp[-4:] + 'inv'
+        id_temp = id_temp.lower()
+        dataDict = {'value': round(site_load_data,3),'entity_name': 'inverter_site_load_instantaneous_kw', 'device_id': id_temp, 'device_type': 'inverter'}
+        self._redback_entities.append(dataDict)
+        return    
             
             
