@@ -32,6 +32,9 @@ class Endpoint(StrEnum):
     PORTAL_INVERTER_SET = 'productcontrol/Index'
     PORTAL_LOGOFF = 'Account/LogOff/'
     PORTAL_DETAILS = 'productcontrol/Details?serialNumber='
+    API_SCHEDULE_BY_SERIALNUMBER = 'Api/v2/Schedule/By/SerialNumber/' 
+    API_SCHEDULE_CREATE_BY_SERIALNUMBER = 'Api/v2/Schedule/Create/By/SerialNumber/'
+    API_SCHEDULE_DELETE_BY_SERIALNUMBER_SCHEDULEID = '/Api/v2/Schedule/By/SerialNumber/' #{serialNumber}/{scheduleId}
     
 
 class InverterOperationType(StrEnum):
