@@ -815,7 +815,7 @@ class RedbackTechClient:
         id_temp = id_temp.lower()
         if self._inverter_control_settings.get(id_temp) is None:    
             self._inverter_control_settings.update([(id_temp,{'power_setting_watts': 0,'power_setting_duration': 0,'power_setting_mode':'Auto'})])
-        dataDict = {'value': self._inverter_control_settings[id_temp]['power_setting_mode'], 'entity_name': 'power_setting_mode', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'select.string' }
+        dataDict = {'value': self._inverter_control_settings[id_temp]['power_setting_mode'], 'entity_name': 'power_setting_mode', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'select.string', 'options': INVERTER_MODES }
         self._redback_selects.append(dataDict)
         if self._redback_schedules is not None:
             schedule_options=[]
