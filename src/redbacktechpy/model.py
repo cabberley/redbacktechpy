@@ -96,6 +96,6 @@ class ScheduleInfo:
     """Dataclass for Schedule Info."""
 
     schedule_id: str
-    schedule_serial_number: str
-    schedule_start_time: str
-    schedule_data: dict[str, Any]
+    device_serial_number: str
+    start_time: datetime.datetime
+    data: dict[str, Any]
