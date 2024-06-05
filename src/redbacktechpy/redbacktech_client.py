@@ -61,7 +61,9 @@ class RedbackTechClient:
         self._redback_buttons = []
         self._redback_numbers = []
         self._redback_selects = []
+        self._redback_schedules = []
         self._redback_site_load = 0
+        self._inverter_control_settings = {}
     
     async def get_redback_data(self):
         """Get Redback Data."""
@@ -110,6 +112,11 @@ class RedbackTechClient:
             for select in self._redback_selects:
                 select_instance, select_id = await self._handle_select(select)
                 selects_data[select_id] = select_instance
+        
+        if self._redback_schedules is not None:
+            for schedule in self._redback_schedules:
+                schedule_instance, schedule_id = await self._handle_schedule(schedule)
+                schedules_data[schedule_id] = schedule_instance
         
         return RedbackTechData(
             user_id = self.client_id,
@@ -172,32 +179,94 @@ class RedbackTechClient:
             return True 
         return False
 
-    async def set_inverter_schedule(self, serial_number: str, start_time: str, duration, inverter_mode, power_w) :
-        """Set inverter schedule."""
-        self.serial_number = serial_number
-        self.mode = inverter_mode
-        self.power = power_w
-        self.duration = duration
-        self.start_time = start_time
+    async def _delete_inverter_schedule(self, device_id: str, schedule_id: str) -> dict[str, Any]:
+        """Delete inverter schedule."""
+        self.device_id = device_id
+        for device in self._redback_device_info:
+            if device['identifiers'] == device_id:
+                self.serial_number = device['serial_number']
+                break
+        await self._check_token()
         
-        self._check_token()
+        headers = {
+            'Authorization': self.token,
+            'Content_type': 'text/json',
+            'accept': 'text/plain'
+        }
+        await self._api_delete(url=f'{BaseUrl.API}{Endpoint.API_SCHEDULE_DELETE_BY_SERIALNUMBER_SCHEDULEID}{self.serial_number}' + '/' + schedule_id, headers=headers, data='' )
+        
+
+    async def _delete_all_inverter_schedules(self, device_id: str):
+        self.device_id = device_id
+        for device in self._redback_device_info:
+            if device['identifiers'] == device_id:
+                self.serial_number = device['serial_number']
+                break
+        headers = {
+            'Authorization': self.token,
+            'Content_type': 'text/json',
+            'accept': 'text/plain'
+        }
+        for schedule in self._redback_schedules:
+            if schedule['serial_number'] == self.serial_number:
+                await self._api_delete(url=f'{BaseUrl.API}{Endpoint.API_SCHEDULE_DELETE_BY_SERIALNUMBER_SCHEDULEID}{self.serial_number}' + '/' + schedule['schedule_id'], headers=headers, data='' )
+        return
+    
+    async def set_inverter_schedule(self, device_id): #serial_number: str, start_time: str, duration, inverter_mode, power_w) :
+        """Set inverter schedule."""
+        self.device_id = device_id
+        for device in self._redback_device_info:
+            if device['identifiers'] == device_id:
+                self.serial_number = device['serial_number']
+                break
+        self.mode = self._inverter_control_settings[device_id]['power_setting_mode']
+        self.power = self._inverter_control_settings[device_id]['power_setting_watts']
+        self.duration = self._inverter_control_settings[device_id]['power_setting_duration']
+        
+        self.start_time = str(datetime.now(timezone.utc).isoformat()).replace('+00:00', 'Z')
+               
         ### convert duration to format
-        days = int(duration/1440)
+        days = int(self.duration/1440)
         if days < 0:
             days = 0
-        hours = int(duration/60)
-        minutes = int(duration - (hours * 60))
-        duration_str = f'{days}.{hours:2}:{minutes:2}'
+        hours = int(self.duration/60)
+        minutes = ('00'+str(int(self.duration - (hours * 60))))[-2:]
+        hours = ('00'+str(hours))[-2:]
+        duration_str = f'{days}.{hours}:{minutes}:00'
+        
+        post_data = {
+            'SerialNumber': self.serial_number,
+            'UserNotes': 'Home Assistant Created Inverter Schedule',
+            'StartTimeUtc': self.start_time,
+            'Duration': duration_str,
+            'DesiredMode': {
+                'InverterMode': self.mode,
+                'ArgumentInWatts': self.power
+            }
+        }
+        #post_data =json.dumps(post_data)  #.replace('"','\"')
+        headers = {
+            'Authorization': self.token,
+            'Content_type': 'application/json',
+            'accept': 'text/plain'
+        }
+        self._check_token()
+        
+        await self._api_post_json(f'{BaseUrl.API}{Endpoint.API_SCHEDULE_CREATE_BY_SERIALNUMBER}', headers, post_data)
         
         return
 
-    async def set_inverter_mode(self, serial_number: str, mode: str, power: int, ross_version: str) -> dict[str, Any]:
+    async def set_inverter_mode_portal(self, device_id: str): 
         """Set inverter mode."""
-        self.serial_number = serial_number
-        self.mode = mode
-        self.power = power
-        self.ross_version = ross_version
-        
+        self.device_id = device_id
+        for device in self._redback_device_info:
+            if device['identifiers'] == device_id:
+                self.serial_number = device['serial_number']
+                self.ross_version = device['sw_version']
+                break
+        self.mode = self._inverter_control_settings[device_id]['power_setting_mode']
+        self.power = self._inverter_control_settings[device_id]['power_setting_watts']
+        self.duration = self._inverter_control_settings[device_id]['power_setting_duration']
         await self.portal_login()
         
         full_url = f'{BaseUrl.PORTAL}{Endpoint.PORTAL_CONFIGURE}{self.serial_number}'
@@ -222,7 +291,31 @@ class RedbackTechClient:
         full_url = f'{BaseUrl.PORTAL}{Endpoint.PORTAL_INVERTER_SET}'
         await self._portal_post(full_url, headers, data)
         return
-     
+    
+    async def update_power_settings_watts(self, power_watts_key, data_value):
+        """Update power settings watts."""
+        temp = self._inverter_control_settings.get(power_watts_key)
+        temp.update([('power_setting_watts', data_value)])
+        #.update([('power_setting_watts', 0),('power_setting_duration', 0),('power_setting_mode', 'Auto')])
+        self._inverter_control_settings.update([(power_watts_key, temp)])
+        return
+    
+    async def update_power_settings_duration(self, power_watts_key, data_value):
+        """Update power settings watts."""
+        temp = self._inverter_control_settings.get(power_watts_key)
+        temp.update([('power_setting_duration', data_value)])
+        #.update([('power_setting_watts', 0),('power_setting_duration', 0),('power_setting_mode', 'Auto')])
+        self._inverter_control_settings.update([(power_watts_key, temp)])
+        return     
+    
+    async def update_power_settings_mode(self, power_watts_key, data_value):
+        """Update power settings watts."""
+        temp = self._inverter_control_settings.get(power_watts_key)
+        temp.update([('power_setting_mode', data_value)])
+        #.update([('power_setting_watts', 0),('power_setting_duration', 0),('power_setting_mode', 'Auto')])
+        self._inverter_control_settings.update([(power_watts_key, temp)])
+        return
+    
     async def get_inverter_list(self) -> dict[str, Any]:
         self.serial_numbers = []
         await self._check_token()
@@ -280,6 +373,21 @@ class RedbackTechClient:
         response = await self._api_get(full_url, headers, {})
         return response
     
+    async def get_schedules_by_serial(self, serial_number: str) -> dict[str, Any]:
+        """/Api/v2/EnergyData/Static/BySerialNumber/{serialNumber}"""
+        self.serial_number = serial_number
+        await self._check_token()
+        
+        headers = {
+            'Authorization': self.token,
+            'Content_type': 'text/json',
+            'accept': 'text/plain'
+        }
+        full_url = f'{BaseUrl.API}{Endpoint.API_SCHEDULE_BY_SERIALNUMBER}{self.serial_number}'
+        response = await self._api_get(full_url, headers, {})
+        return response
+    
+    
     async def get_config_by_multiple_serial(self, serial_numbers: str | None=None) -> dict[str, Any]:
         """"""
         self._serial_numbers: str = serial_numbers if serial_numbers else self.serial_numbers
@@ -326,15 +434,17 @@ class RedbackTechClient:
         if not await self._check_device_info_refresh():
             #Get the device info if it needs to be refreshed
             self._serial_numbers = await self.get_inverter_list()
-            device_info = False
+            #device_info = False
         
         for serial_number in self._serial_numbers:
             response1 = await self.get_static_by_serial(serial_number)
             response2 = await self.get_dynamic_by_serial(serial_number)
+            response3 = await self.get_schedules_by_serial(serial_number)
             #self._flatInverters = await self._convert_static_by_serial_to_inverter_list(response1, response2)
             #self._redback_devices.append(self._flatInverters)  ###
             await self._convert_responses_to_inverter_entities(response1, response2)
-            await self._create_device_info_inverter(response1)
+            await self._convert_responses_to_schedule_entities(response3)
+            #await self._create_device_info_inverter(response1)
             await self._create_number_entities(response1)
             await self._create_select_entities(response1)
             
@@ -475,6 +585,21 @@ class RedbackTechClient:
             #device_data=entity,
         )
         return entity_instance, data['id']
+    
+    async def _handle_schedule(self, schedule: dict[str, Any]) -> (ScheduleInfo, str):
+        """Handle schedule data."""
+        
+        data = {
+            'id': schedule['schedule_id']
+        }
+               
+        schedule_instance = ScheduleInfo(
+            schedule_id=data['id'],
+            data=schedule,
+            device_serial_number = schedule['device_id'],
+            start_time = datetime.fromisoformat((schedule['start_time_utc']).replace('Z','+00:00')).replace(tzinfo=timezone.utc).astimezone(timezone.utc).isoformat()        
+        )
+        return schedule_instance, data['id']
   
     async def _api_post(self, url: str, headers: dict[str, Any], data ) -> dict[str, Any]:
         """Make POST API call."""
@@ -493,6 +618,12 @@ class RedbackTechClient:
         """Make GET API call."""
 
         async with self._session1.get(url, headers=headers, data=data, timeout=self.timeout) as resp:
+            return await self._api_response(resp)
+ 
+    async def _api_delete(self, url: str, headers: dict[str, Any], data: dict[str, Any]) -> dict[str, Any]:
+        """Make GET API call."""
+
+        async with self._session1.delete(url, headers=headers, data=data, timeout=self.timeout) as resp:
             return await self._api_response(resp)
  
     @staticmethod
@@ -567,6 +698,12 @@ class RedbackTechClient:
 
         async with self._session2.get(url, headers=headers, data=data, timeout=self.timeout) as resp:
             return await self._portal_response(resp)
+        
+    async def _portal_delete(self, url: str, headers: dict[str, Any], data: dict[str, Any]) -> dict[str, Any]:
+        """Make GET Portal call."""
+
+        async with self._session2.delete(url, headers=headers, data=data, timeout=self.timeout) as resp:
+            return await self._portal_response(resp)
  
     @staticmethod
     async def _portal_response(resp: ClientResponse): # -> dict[str, Any]:
@@ -614,18 +751,55 @@ class RedbackTechClient:
         id_temp = data['Data']['Nodes'][0]['StaticData']['Id']
         id_temp = id_temp[-4:] + 'inv'
         id_temp = id_temp.lower()
-        dataDict = {'value': 0, 'entity_name': 'power_setting_duration', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'number.string' }
+        
+        if self._inverter_control_settings.get(id_temp) is None:    
+            self._inverter_control_settings.update([(id_temp,{'power_setting_watts': 0,'power_setting_duration': 0,'power_setting_mode':'Auto'})])
+        dataDict = {'value': self._inverter_control_settings[id_temp]['power_setting_duration'], 'entity_name': 'power_setting_duration', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'number.string' }
         self._redback_numbers.append(dataDict)
-        dataDict = {'value': 0, 'entity_name': 'power_setting_watts', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'number.string' }
+        dataDict = {'value': self._inverter_control_settings[id_temp]['power_setting_watts'], 'entity_name': 'power_setting_watts', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'number.string' }
         self._redback_numbers.append(dataDict)
+        return
 
     async def _create_select_entities(self, data) -> None:
         id_temp = data['Data']['Nodes'][0]['StaticData']['Id']
         id_temp = id_temp[-4:] + 'inv'
         id_temp = id_temp.lower()
-        dataDict = {'value': 'Auto', 'entity_name': 'power_setting_mode', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'select.string' }
+        if self._inverter_control_settings.get(id_temp) is None:    
+            self._inverter_control_settings.update([(id_temp,{'power_setting_watts': 0,'power_setting_duration': 0,'power_setting_mode':'Auto'})])
+        dataDict = {'value': self._inverter_control_settings[id_temp]['power_setting_mode'], 'entity_name': 'power_setting_mode', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'select.string' }
         self._redback_selects.append(dataDict)
+        return
         
+    async def _convert_responses_to_schedule_entities(self, data) -> None:
+        self._redback_schedule = []
+        if len(data['Data']['Schedules']) == 0:
+            return
+        id_temp = data['Data']['Schedules'][0]['SerialNumber']
+        id_temp = id_temp[-4:] + 'inv'
+        id_temp = id_temp.lower()
+        for schedule in data['Data']['Schedules']:
+            days =0
+            if schedule['Duration'].find('.')> -1:
+                days = int(schedule['Duration'].split('.')[0]) *24*60
+                schedule['Duration'] = schedule['Duration'].split('.')[1]
+            schedule['Duration'] = int(schedule['Duration'].split(':')[0])*60 + int(schedule['Duration'].split(':')[1]) + days
+            end_time = (datetime.fromisoformat((schedule['StartTimeUtc']).replace('Z','+00:00')) + timedelta(minutes=schedule['Duration']))
+            #end_time = (datetime.fromisoformat((schedule['StartTimeUtc']).replace('Z','+00:00')).replace(tzinfo=timezone.utc).astimezone(timezone.utc).isoformat() + timedelta(minutes=schedule['Duration'])
+            dataDict = {
+                'schedule_id': schedule['ScheduleId'],
+                'serial_number': schedule['SerialNumber'],
+                'siteid': schedule['SiteId'],
+                'start_time_utc': schedule['StartTimeUtc'],
+                'end_time': end_time,
+                'duration': schedule['Duration'],
+                'inverter_mode': schedule['DesiredMode']['InverterMode'],
+                'power_w': schedule['DesiredMode']['ArgumentInWatts'],   
+                'device_id': id_temp,
+                'device_type': 'inverter',         
+            }
+            self._redback_schedules.append(dataDict)
+        return
+    
     async def _convert_responses_to_inverter_entities(self, data, data2) -> None:
         """Convert responses to entities."""
         pvId =1
@@ -683,7 +857,7 @@ class RedbackTechClient:
         self._redback_entities.append(dataDict)
         #dataDict = {'value': data['Data']['Nodes'][0]['StaticData']['Id'],'entity_name': 'inverter_serial_number', 'device_id': id_temp, 'device_type': 'inverter'}
         #self._redback_entities.append(dataDict)
-        dataDict = {'value': datetime.fromisoformat((data2['Data']['TimestampUtc']).replace('Z','+00:00')).replace(tzinfo=timezone.utc).astimezone(timezone.utc).isoformat(),'entity_name': 'timestamp_utc', 'device_id': id_temp, 'device_type': 'inverter'}
+        dataDict = {'value': datetime.fromisoformat((data2['Data']['TimestampUtc']).replace('Z','+00:00')),'entity_name': 'timestamp_utc', 'device_id': id_temp, 'device_type': 'inverter'} #datetime.fromisoformat((data2['Data']['TimestampUtc']).replace('Z','+00:00')).replace(tzinfo=timezone.utc).astimezone(timezone.utc).isoformat()
         self._redback_entities.append(dataDict)
         dataDict = {'value': data2['Data']['FrequencyInstantaneousHz'],'entity_name': 'frequency_instantaneous', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(dataDict)
