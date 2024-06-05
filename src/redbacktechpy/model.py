@@ -18,6 +18,7 @@ class RedbackTechData:
     buttons: Optional[dict[int, Any]] = None
     schedules: Optional[dict[int, Any]] = None
     selects: Optional[dict[int, Any]] = None
+    schedules_datetime_data: Optional[dict[int, Any]] = None
     
 
 @dataclass
@@ -90,7 +91,15 @@ class Selects:
     device_serial_number: str
     data: dict[str, Any]
     type: str
-    
+
+@dataclass
+class ScheduleDateTime:
+    """Dataclass for Redback Inverters."""
+    id: str
+    device_serial_number: str
+    data: dict[str, Any]
+    type: str
+
 @dataclass
 class ScheduleInfo:
     """Dataclass for Schedule Info."""
