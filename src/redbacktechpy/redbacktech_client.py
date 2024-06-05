@@ -1144,15 +1144,15 @@ class RedbackTechClient:
                     dataDict = {'value': schedule['inverter_mode'],'entity_name': 'scheduled_inverter_mode', 'device_id': id_temp, 'device_type': 'inverter'}
                     self._redback_entities.append(dataDict)
         else:
-            dataDict = {'value': '','entity_name': 'scheduled_start_time', 'device_id': id_temp, 'device_type': 'inverter'}
+            dataDict = {'value': None,'entity_name': 'scheduled_start_time', 'device_id': id_temp, 'device_type': 'inverter'}
             self._redback_entities.append(dataDict)
-            dataDict = {'value': '','entity_name': 'scheduled_finish_time', 'device_id': id_temp, 'device_type': 'inverter'}
+            dataDict = {'value': None,'entity_name': 'scheduled_finish_time', 'device_id': id_temp, 'device_type': 'inverter'}
             self._redback_entities.append(dataDict)
-            dataDict = {'value': '','entity_name': 'scheduled_duration', 'device_id': id_temp, 'device_type': 'inverter'}
+            dataDict = {'value': 0,'entity_name': 'scheduled_duration', 'device_id': id_temp, 'device_type': 'inverter'}
             self._redback_entities.append(dataDict)
-            dataDict = {'value': '','entity_name': 'scheduled_power_w', 'device_id': id_temp, 'device_type': 'inverter'}
+            dataDict = {'value': 0,'entity_name': 'scheduled_power_w', 'device_id': id_temp, 'device_type': 'inverter'}
             self._redback_entities.append(dataDict)
-            dataDict = {'value': '','entity_name': 'scheduled_inverter_mode', 'device_id': id_temp, 'device_type': 'inverter'}
+            dataDict = {'value': 'Auto','entity_name': 'scheduled_inverter_mode', 'device_id': id_temp, 'device_type': 'inverter'}
             self._redback_entities.append(dataDict)
 
 
