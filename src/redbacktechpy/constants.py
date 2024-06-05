@@ -8,6 +8,15 @@ AUTH_ERROR_CODES = [
     'Login session expired.',
 ]
 
+INVERTER_MODES = [
+    'Auto',
+    'ChargeBattery',
+    'DischargeBattery',
+    'ImportPower',
+    'ExportPower',
+    'Conserve',
+]
+
 class BaseUrl(StrEnum):
     API = 'https://api.redbacktech.com/'
     PORTAL = 'https://portal.redbacktech.com/'
