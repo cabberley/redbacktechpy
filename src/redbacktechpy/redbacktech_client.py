@@ -16,6 +16,7 @@ from .constants import (
     TIMEOUT,
     AUTH_ERROR_CODES,
     DEVICEINFOREFRESH,
+    INVERTER_MODES
 )
 
 from .model import (
