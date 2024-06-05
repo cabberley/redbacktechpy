@@ -449,7 +449,7 @@ class RedbackTechClient:
             #Get the device info if it needs to be refreshed
             self._serial_numbers = await self.get_inverter_list()
             #device_info = False
-        
+        self._redback_device_info = []
         self._redback_entities = []
         for serial_number in self._serial_numbers:
             response1 = await self.get_static_by_serial(serial_number)
@@ -751,7 +751,7 @@ class RedbackTechClient:
         return response
 
     async def _create_device_info_inverter(self, data) -> None:
-        self._redback_device_info = []
+        
         id_temp = data['Data']['Nodes'][0]['StaticData']['Id']
         id_temp = id_temp[-4:] + 'inv'
         id_temp = id_temp.lower()
