@@ -67,8 +67,8 @@ class RedbackTechClient:
         self._redback_schedules = []
         self._redback_site_load = 0
         self._inverter_control_settings = {}
-        self._redback_schedule_selected = ''
-        self._redback_schedule_start_time = datetime.now(timezone.utc).isoformat()
+        self._redback_schedule_selected = {}
+        #self._redback_schedule_start_time = {}
     
     async def get_redback_data(self):
         """Get Redback Data."""
@@ -94,6 +94,7 @@ class RedbackTechClient:
                 if device['device_type'] == 'battery':
                     bat_instance, bat_id = await self._handle_battery(device)
                     battery_data[bat_id] = bat_instance
+                    
         if self._redback_entities is not None:
             for entity in self._redback_entities:
                 ent_instance, ent_id = await self._handle_entity(entity)
@@ -304,13 +305,13 @@ class RedbackTechClient:
         await self._portal_post(full_url, headers, data)
         return
     
-    async def update_power_settings_watts(self, power_watts_key, data_value):
-        """Update power settings watts."""
-        temp = self._inverter_control_settings.get(power_watts_key)
-        temp.update([('power_setting_watts', data_value)])
+    #async def update_power_settings_watts(self, power_watts_key, data_value):
+    #    """Update power settings watts."""
+    #    temp = self._inverter_control_settings.get(power_watts_key)
+    #    temp.update([('power_setting_watts', data_value)])
         #.update([('power_setting_watts', 0),('power_setting_duration', 0),('power_setting_mode', 'Auto')])
-        self._inverter_control_settings.update([(power_watts_key, temp)])
-        return
+    #    self._inverter_control_settings.update([(power_watts_key, temp)])
+    #    return
     
     async def update_inverter_control_values(self, device_id, data_key, data_value):
         """Update inverter control values."""
@@ -319,29 +320,18 @@ class RedbackTechClient:
         self._inverter_control_settings.update([(device_id, temp)])
         return
     
-    async def update_power_settings_duration(self, power_watts_key, data_value):
-        """Update power settings watts."""
-        temp = self._inverter_control_settings.get(power_watts_key)
-        temp.update([('power_setting_duration', data_value)])
-        #.update([('power_setting_watts', 0),('power_setting_duration', 0),('power_setting_mode', 'Auto')])
-        self._inverter_control_settings.update([(power_watts_key, temp)])
-        return     
-    
-    async def update_power_settings_mode(self, power_watts_key, data_value):
-        """Update power settings watts."""
-        temp = self._inverter_control_settings.get(power_watts_key)
-        temp.update([('power_setting_mode', data_value)])
-        #.update([('power_setting_watts', 0),('power_setting_duration', 0),('power_setting_mode', 'Auto')])
-        self._inverter_control_settings.update([(power_watts_key, temp)])
-        return
-
-    async def update_selected_schedule_id(self, schedule_id: str) -> None:
-        self._redback_schedule_selected = schedule_id
+    async def update_selected_schedule_id(self, device_id, schedule_id: str) -> None:
+        temp = self._redback_schedule_selected.get(device_id)
+        temp.update([('schedule_id', schedule_id)])
+        self._redback_schedule_selected.update([(device_id, temp)])
+        #self._redback_schedule_selected = schedule_id
         return
     
-    async def update_selected_schedule_start_time(self, start_time: datetime) -> None:
-        self._redback_schedule_start_time = start_time
-        return
+    #async def update_selected_schedule_start_time(self, device_id, start_time: datetime) -> None:
+    #    temp = self._redback_schedule_start_time.get(device_id)
+    #    temp.update([('start_time', start_time)])
+    #    self._redback_schedule_start_time.update([(device_id, temp)])
+    #    return
     
     async def get_inverter_list(self) -> dict[str, Any]:
         self.serial_numbers = []
@@ -455,12 +445,12 @@ class RedbackTechClient:
         return True      
 
     async def create_device_info(self) -> None:
-        device_info = True
         if not await self._check_device_info_refresh():
             #Get the device info if it needs to be refreshed
             self._serial_numbers = await self.get_inverter_list()
             #device_info = False
         
+        self._redback_entities = []
         for serial_number in self._serial_numbers:
             response1 = await self.get_static_by_serial(serial_number)
             response2 = await self.get_dynamic_by_serial(serial_number)
@@ -496,7 +486,6 @@ class RedbackTechClient:
             response = await self.get_dynamic_by_serial(serial_number)
             self._dynamic_data.append(response)
         return
-  
     
     async def _handle_device_info(self, device: dict[str, Any]) -> (DeviceInfo, str):
         """Handle device info data."""
@@ -762,6 +751,7 @@ class RedbackTechClient:
         return response
 
     async def _create_device_info_inverter(self, data) -> None:
+        self._redback_device_info = []
         id_temp = data['Data']['Nodes'][0]['StaticData']['Id']
         id_temp = id_temp[-4:] + 'inv'
         id_temp = id_temp.lower()
@@ -790,20 +780,24 @@ class RedbackTechClient:
         self._redback_device_info.append(dataDict)
 
     async def _create_datetime_entities(self, data) -> None:
-        id_temp = data['Data']['Nodes'][0]['StaticData']['Id']
-        id_temp = id_temp[-4:] + 'inv'
-        id_temp = id_temp.lower()
-        dataDict = {'value': self._redback_schedule_start_time, 'entity_name': 'schedule_create_start_time', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'number.string' }
-        self._redback_schedule_datetime.append(dataDict)
-        
-
-    async def _create_number_entities(self, data) -> None:
+        self._redback_schedule_datetime = []
         id_temp = data['Data']['Nodes'][0]['StaticData']['Id']
         id_temp = id_temp[-4:] + 'inv'
         id_temp = id_temp.lower()
         
         if self._inverter_control_settings.get(id_temp) is None:    
-            self._inverter_control_settings.update([(id_temp,{'power_setting_watts': 0,'power_setting_duration': 0,'power_setting_mode':'Auto'})])
+            self._inverter_control_settings.update([(id_temp,{'power_setting_watts': 0,'power_setting_duration': 0,'power_setting_mode':'Auto', 'start_time': datetime.now(timezone.utc)})])
+        dataDict = {'value': self._inverter_control_settings[id_temp]['start_time'], 'entity_name': 'schedule_create_start_time', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'datetime.datetime' }
+        self._redback_schedule_datetime.append(dataDict)
+
+    async def _create_number_entities(self, data) -> None:
+        self._redback_numbers = []
+        id_temp = data['Data']['Nodes'][0]['StaticData']['Id']
+        id_temp = id_temp[-4:] + 'inv'
+        id_temp = id_temp.lower()
+        
+        if self._inverter_control_settings.get(id_temp) is None:    
+            self._inverter_control_settings.update([(id_temp,{'power_setting_watts': 0,'power_setting_duration': 0,'power_setting_mode':'Auto', 'start_time': datetime.now(timezone.utc)})])
         dataDict = {'value': self._inverter_control_settings[id_temp]['power_setting_duration'], 'entity_name': 'power_setting_duration', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'number.string' }
         self._redback_numbers.append(dataDict)
         dataDict = {'value': self._inverter_control_settings[id_temp]['power_setting_watts'], 'entity_name': 'power_setting_watts', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'number.string' }
@@ -811,6 +805,7 @@ class RedbackTechClient:
         return
 
     async def _create_select_entities(self, data, data2) -> None:
+        self._redback_selects = []
         id_temp = data['Data']['Nodes'][0]['StaticData']['Id']
         id_temp = id_temp[-4:] + 'inv'
         id_temp = id_temp.lower()
@@ -818,18 +813,20 @@ class RedbackTechClient:
             self._inverter_control_settings.update([(id_temp,{'power_setting_watts': 0,'power_setting_duration': 0,'power_setting_mode':'Auto'})])
         dataDict = {'value': self._inverter_control_settings[id_temp]['power_setting_mode'], 'entity_name': 'power_setting_mode', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'select.string', 'options': INVERTER_MODES }
         self._redback_selects.append(dataDict)
+        if self._redback_schedule_selected.get(id_temp) is None:
+            self._redback_schedule_selected.update([(id_temp,{'schedule_id': None})])
         if self._redback_schedules is not None:
             schedule_options=[]
             for schedule in self._redback_schedules:
                 schedule_options.append(schedule['schedule_id'])
-                    
-            dataDict = {'value': self._redback_schedule_selected, 'entity_name': 'schedule_id_selected', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'select.string', 'options': schedule_options}
-            self._redback_selects.append(dataDict)
-        
+            dataDict = {'value': self._redback_schedule_selected[id_temp]['schedule_id'], 'entity_name': 'schedule_id_selected', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'select.string', 'options': schedule_options}
+        else:
+            dataDict = {'value': None, 'entity_name': 'schedule_id_selected', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'select.string', 'options': None}
+        self._redback_selects.append(dataDict)
         return
         
     async def _convert_responses_to_schedule_entities(self, data) -> None:
-        self._redback_schedule = []
+        self._redback_schedules = []
         if len(data['Data']['Schedules']) == 0:
             return
         id_temp = data['Data']['Schedules'][0]['SerialNumber']
