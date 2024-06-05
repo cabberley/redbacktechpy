@@ -311,6 +311,13 @@ class RedbackTechClient:
         self._inverter_control_settings.update([(power_watts_key, temp)])
         return
     
+    async def update_inverter_control_values(self, device_id, data_key, data_value):
+        """Update inverter control values."""
+        temp = self._inverter_control_settings.get(device_id)
+        temp.update([(data_key, data_value)])
+        self._inverter_control_settings.update([(device_id, temp)])
+        return
+    
     async def update_power_settings_duration(self, power_watts_key, data_value):
         """Update power settings watts."""
         temp = self._inverter_control_settings.get(power_watts_key)
