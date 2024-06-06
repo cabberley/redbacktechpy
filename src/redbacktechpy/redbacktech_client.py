@@ -627,18 +627,18 @@ class RedbackTechClient:
         )
         return schedule_instance, data['id']
   
-    async def _handle_schedule_datetime(self, schedule: dict[str, Any]) -> (ScheduleDateTime, str):
+    async def _handle_schedule_datetime(self, entity: dict[str, Any]) -> (ScheduleDateTime, str):
         """Handle schedule data."""
         
         data = {
-            'id': schedule['device_id']
+            'id': entity['device_id'] + entity['entity_name']
         }
                
         schedule_instance = ScheduleDateTime(
             id=data['id'],
-            device_serial_number = schedule['device_id'],
-            data=schedule,
-            type=schedule['device_type']
+            device_serial_number = entity['device_id'],
+            data=entity,
+            type=entity['device_type']
         )
         return schedule_instance, data['id']
   
