@@ -195,6 +195,7 @@ class RedbackTechClient:
     async def delete_inverter_schedule(self, device_id: str, schedule_id: str) -> dict[str, Any]:
         """Delete inverter schedule."""
         self.device_id = device_id
+        self._redback_schedule_selected.update([(self.device_id,{'schedule_id': None})])
         for device in self._redback_device_info:
             if device['identifiers'] == device_id:
                 self.serial_number = device['serial_number']
@@ -211,6 +212,7 @@ class RedbackTechClient:
 
     async def delete_all_inverter_schedules(self, device_id: str):
         self.device_id = device_id
+        self._redback_schedule_selected.update([(self.device_id,{'schedule_id': None})])
         for device in self._redback_device_info:
             if device['identifiers'] == device_id:
                 self.serial_number = device['serial_number']
@@ -256,7 +258,7 @@ class RedbackTechClient:
             'Duration': duration_str,
             'DesiredMode': {
                 'InverterMode': self.mode,
-                'ArgumentInWatts': self.power
+                'ArgumentInWatts': int(self.power)
             }
         }
         #post_data =json.dumps(post_data)  #.replace('"','\"')
