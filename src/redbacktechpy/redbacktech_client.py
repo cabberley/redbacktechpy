@@ -240,7 +240,8 @@ class RedbackTechClient:
         self.power = self._inverter_control_settings[device_id]['power_setting_watts']
         self.duration = self._inverter_control_settings[device_id]['power_setting_duration']
         
-        self.start_time = str(datetime.now(timezone.utc).isoformat()).replace('+00:00', 'Z')
+        #self.start_time = str(datetime.now(timezone.utc).isoformat()).replace('+00:00', 'Z')
+        self.start_time = self._inverter_control_settings[device_id]['start_time']
                
         ### convert duration to format
         days = int(self.duration/1440)
