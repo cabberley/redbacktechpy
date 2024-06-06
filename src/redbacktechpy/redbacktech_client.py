@@ -267,7 +267,7 @@ class RedbackTechClient:
             'Content_type': 'application/json',
             'accept': 'text/plain'
         }
-        self._check_token()
+        await self._check_token()
         
         await self._api_post_json(f'{BaseUrl.API}{Endpoint.API_SCHEDULE_CREATE_BY_SERIALNUMBER}', headers, post_data)
         
