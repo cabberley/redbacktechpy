@@ -1117,7 +1117,8 @@ class RedbackTechClient:
         id_temp = data['Data']['Nodes'][0]['StaticData']['Id']
         id_temp = id_temp[-4:] + 'inv'
         id_temp = id_temp.lower()
-        dataDict = {'value': round(site_load_data,3),'entity_name': 'inverter_site_load_instantaneous_kw', 'device_id': id_temp, 'device_type': 'inverter'}
+        value_temp= round(site_load_data,3)
+        dataDict = {'value': value_temp,'entity_name': 'inverter_site_load_instantaneous_kw', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(dataDict)
         if self._redback_schedule_selected[id_temp]['schedule_id'] != None:
             #add schedule to entities
