@@ -55,8 +55,6 @@ class RedbackTechClient:
         self.token_expiration: datetime | None = None
         self._GAFToken: str | None = None
         self._device_info_refresh_time: datetime | None = None
-        self._flatInverters = []
-        self._flatBatterys = []
         self._redback_devices = []
         self._redback_entities = []
         self._redback_device_info = []
@@ -65,9 +63,10 @@ class RedbackTechClient:
         self._redback_selects = []
         self._redback_schedule_datetime = []
         self._redback_schedules = []
-        self._redback_site_load = 0
+        self._redback_site_load = {}
         self._inverter_control_settings = {}
         self._redback_schedule_selected = {}
+        self._redback_temp_voltage = {}
     
     async def get_redback_data(self):
         """Get Redback Data."""
@@ -456,23 +455,21 @@ class RedbackTechClient:
         self._redback_selects = []
         self._redback_schedule_datetime = []
         
+        #For each Inverter found prepare the data wanted
         for serial_number in self._serial_numbers:
             response1 = await self._get_static_by_serial(serial_number)
             response2 = await self._get_dynamic_by_serial(serial_number)
             response3 = await self._get_schedules_by_serial(serial_number)
-            #self._flatInverters = await self._convert_static_by_serial_to_inverter_list(response1, response2)
-            #self._redback_devices.append(self._flatInverters)  ###
+            self._redback_site_load[serial_number]=0
+            #process and prepare base data wanted
             await self._convert_responses_to_inverter_entities(response1, response2)
             await self._convert_responses_to_schedule_entities(response3)
-            #await self._create_device_info_inverter(response1)
             await self._create_number_entities(response1)
             await self._create_select_entities(response1, response3)
             
-            #print(self._flatInverters['serial_number'])
-            #response = await self._create_dynamic_info()
+            #If we find a battery attached to the inverter process and prepare additional data wanted
             if response1['Data']['Nodes'][0]['StaticData']['BatteryCount'] > 0:
                 soc_data = await self._get_config_by_serial(response1['Data']['Nodes'][0]['StaticData']['Id'])
-                #self._flatBatterys = await self._convert_static_by_serial_to_battery_list(response1, response2, soc_data)
                 await self._convert_responses_to_battery_entities(response1, response2, soc_data)
                 await self._create_device_info_battery(response1)
                 #self._redback_devices.append(self._flatBatterys)
@@ -613,7 +610,7 @@ class RedbackTechClient:
             schedule_id=data['id'],
             data=schedule,
             device_serial_number = schedule['device_id'],
-            start_time =  schedule['start_time_utc']  #datetime.fromisoformat((schedule['start_time_utc']).replace('Z','+00:00')).replace(tzinfo=timezone.utc).astimezone(timezone.utc).isoformat()        
+            start_time =  schedule['start_time_utc'] 
         )
         return schedule_instance, data['id']
   
@@ -981,6 +978,7 @@ class RedbackTechClient:
             entity_name_temp = f'inverter_phase_{phaseAlpha}_power_factor_instantaneous_minus_1to1'
             dataDict = {'value': phase['PowerFactorInstantaneousMinus1to1'],'entity_name': entity_name_temp, 'device_id': id_temp, 'device_type': 'inverter'}
             self._redback_entities.append(dataDict)
+        self._redback_temp_voltage[(data['Data']['Nodes'][0]['StaticData']['Id'])] = round( phase_voltage_sum / phase_count * sqrt(phase_count), 1)
         dataDict = {'value': round( phase_voltage_sum / phase_count * sqrt(phase_count), 1), 'entity_name': 'inverter_phase_total_voltage_instantaneous_v', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(dataDict)
         dataDict = {'value': phase_Current_sum, 'entity_name': 'inverter_phase_total_current_instantaneous_a', 'device_id': id_temp, 'device_type': 'inverter'}
@@ -992,7 +990,7 @@ class RedbackTechClient:
         dataDict = {'value': round(phase_power_net_sum,3), 'entity_name': 'inverter_phase_total_active_net_power_instantaneous_kw', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(dataDict)
         
-        self._redback_site_load = phase_power_net_sum + data2['Data']['PvPowerInstantaneouskW']
+        self._redback_site_load[(data['Data']['Nodes'][0]['StaticData']['Id'])] = phase_power_net_sum + data2['Data']['PvPowerInstantaneouskW']
         return
         
     async def _convert_responses_to_battery_entities(self, data, data2, soc_data) -> None:
@@ -1100,7 +1098,7 @@ class RedbackTechClient:
             self._redback_entities.append(dataDict)
             batteryId += 1
         
-        dataDict = {'value': data2['Data']['BatteryPowerNegativeIsChargingkW']*1000/240,'entity_name': 'battery_current_negative_is_charging_a', 'device_id': id_temp, 'device_type': 'battery'}
+        dataDict = {'value': round(data2['Data']['BatteryPowerNegativeIsChargingkW']*1000/self._redback_temp_voltage[(data['Data']['Nodes'][0]['StaticData']['Id'])],1),'entity_name': 'battery_current_negative_is_charging_a', 'device_id': id_temp, 'device_type': 'battery'}
         self._redback_entities.append(dataDict)
         
         for cabinet in data2['Data']['Battery']['Cabinets']:
@@ -1112,7 +1110,7 @@ class RedbackTechClient:
             self._redback_entities.append(dataDict)
             cabinetId += 1
         
-        self._redback_site_load += data2['Data']['BatteryPowerNegativeIsChargingkW']
+        self._redback_site_load[(data['Data']['Nodes'][0]['StaticData']['Id'])] += data2['Data']['BatteryPowerNegativeIsChargingkW']
         return
     
     async def _add_additional_entities(self, site_load_data, data):
@@ -1147,129 +1145,4 @@ class RedbackTechClient:
             dataDict = {'value': 'Auto','entity_name': 'scheduled_inverter_mode', 'device_id': id_temp, 'device_type': 'inverter'}
             self._redback_entities.append(dataDict)
 
-
         return    
-            
-              
-    async def _convert_static_by_serial_to_inverter_list(self, data, data2) -> list[str]:
-        """Convert static by serial to list."""
-
-        dataDict = {}
-        pvId =1
-        #static
-        dataDict['device_type'] = 'inverter'
-        dataDict['model'] = data['Data']['Nodes'][0]['StaticData']['ModelName']
-        dataDict['sw_version'] = data['Data']['Nodes'][0]['StaticData']['SoftwareVersion']
-        dataDict['hw_version'] = data['Data']['Nodes'][0]['StaticData']['FirmwareVersion']
-        dataDict['serial_number'] = data['Data']['Nodes'][0]['StaticData']['Id']
-        dataDict['latitude'] = data['Data']['StaticData']['Location']['Latitude']
-        dataDict['longitude'] = data['Data']['StaticData']['Location']['Longitude']
-        dataDict['network_connection'] = data['Data']['StaticData']['RemoteAccessConnection']['Type']
-        dataDict['approved_capacity'] = data['Data']['StaticData']['ApprovedCapacityW']
-        dataDict['generation_hard_limit_va'] = data['Data']['StaticData']['SiteDetails']['GenerationHardLimitVA']
-        dataDict['generation_soft_limit_va'] = data['Data']['StaticData']['SiteDetails']['GenerationSoftLimitVA']
-        dataDict['export_hard_limit_kw'] = data['Data']['StaticData']['SiteDetails']['ExportHardLimitkW']
-        dataDict['export_soft_limit_kw'] = data['Data']['StaticData']['SiteDetails']['ExportSoftLimitkW']
-        dataDict['site_export_limit_kw'] = data['Data']['StaticData']['SiteDetails']['SiteExportLimitkW']
-        dataDict['pv_panel_model'] = data['Data']['StaticData']['SiteDetails']['PanelModel']
-        dataDict['pv_panel_size_kw'] = data['Data']['StaticData']['SiteDetails']['PanelSizekW']
-        dataDict['system_type'] = data['Data']['StaticData']['SiteDetails']['SystemType']
-        dataDict['inverter_max_export_power_kw'] = data['Data']['StaticData']['SiteDetails']['InverterMaxExportPowerkW']
-        dataDict['inverter_max_import_power_kw'] = data['Data']['StaticData']['SiteDetails']['InverterMaxImportPowerkW']
-        dataDict['commissioning_date'] = data['Data']['StaticData']['CommissioningDate']
-        dataDict['model_name'] = data['Data']['Nodes'][0]['StaticData']['ModelName']
-        dataDict['nmi'] = data['Data']['StaticData']['NMI']
-        dataDict['site_id'] = data['Data']['StaticData']['Id']
-        dataDict['inverter_site_type'] = data['Data']['StaticData']['Type']
-        dataDict['battery_count'] = data['Data']['Nodes'][0]['StaticData']['BatteryCount']
-        dataDict['software_version'] = data['Data']['Nodes'][0]['StaticData']['SoftwareVersion']
-        dataDict['firmware_version'] = data['Data']['Nodes'][0]['StaticData']['FirmwareVersion']
-        dataDict['inverter_serial_number'] = data['Data']['Nodes'][0]['StaticData']['Id']
-        #dynamic
-        dataDict['timestamp_utc'] = data2['Data']['TimestampUtc']
-        dataDict['frequency_instantaneous'] = data2['Data']['FrequencyInstantaneousHz']
-        dataDict['pv_power_instantaneous_kw'] = data2['Data']['PvPowerInstantaneouskW']
-        dataDict['inverter_temperature_c'] = data2['Data']['InverterTemperatureC']
-        dataDict['pv_all_time_energy_kwh'] = data2['Data']['PvAllTimeEnergykWh']
-        dataDict['export_all_time_energy_kwh'] = data2['Data']['ExportAllTimeEnergykWh']
-        dataDict['import_all_time_energy_kwh'] = data2['Data']['ImportAllTimeEnergykWh']
-        dataDict['load_all_time_energy_kwh'] = data2['Data']['LoadAllTimeEnergykWh']
-        dataDict['status'] = data2['Data']['Status']
-        dataDict['power_mode_inverter_mode'] = data2['Data']['Inverters'][0]['PowerMode']['InverterMode']
-        dataDict['power_mode_power_w'] = data2['Data']['Inverters'][0]['PowerMode']['PowerW']
-        for pv in data2['Data']['PVs']:
-            dataDict[f'mppt_{pvId}_current_a'] = pv['CurrentA']
-            dataDict[f'mppt_{pvId}_voltage_v'] = pv['VoltageV']
-            dataDict[f'mppt_{pvId}_power_kw'] = pv['PowerkW']
-            pvId += 1
-        for phase in data2['Data']['Phases']:  
-            phaseAlpha=phase['Id']
-            dataDict[f'inverter_phase_{phaseAlpha}_active_exported_power_instantaneous_kw'] = phase['ActiveExportedPowerInstantaneouskW']
-            dataDict[f'inverter_phase_{phaseAlpha}_active_imported_power_instantaneous_kw'] = phase['ActiveImportedPowerInstantaneouskW']
-            dataDict[f'inverter_phase_{phaseAlpha}_voltage_instantaneous_v'] = phase['VoltageInstantaneousV']
-            dataDict[f'inverter_phase_{phaseAlpha}_current_instantaneous_a'] = phase['CurrentInstantaneousA']
-            dataDict[f'inverter_phase_{phaseAlpha}_power_factor_instantaneous_minus_1to1'] = phase['PowerFactorInstantaneousMinus1to1']
-        return dataDict
-    
-    async def _convert_static_by_serial_to_battery_list(self, data, data2, soc_data) -> list[str]:
-        dataDict = {}
-        batteryName = ''
-        batteryId = 1
-        cabinetId = 1
-        dataDict['device_type'] = 'battery'
-        dataDict['model'] = data['Data']['Nodes'][0]['StaticData']['ModelName']
-        dataDict['sw_version'] = data['Data']['Nodes'][0]['StaticData']['SoftwareVersion']
-        dataDict['hw_version'] = data['Data']['Nodes'][0]['StaticData']['FirmwareVersion']
-        dataDict['serial_number'] = data['Data']['Nodes'][0]['StaticData']['Id']
-        
-        dataDict['model'] = data['Data']['Nodes'][0]['StaticData']['ModelName']
-        dataDict['sw_version'] = data['Data']['Nodes'][0]['StaticData']['SoftwareVersion']
-        dataDict['hw_version'] = data['Data']['Nodes'][0]['StaticData']['FirmwareVersion']
-        dataDict['serial_number'] = data['Data']['Nodes'][0]['StaticData']['Id']
-        dataDict['min_soc_0_to_1'] = soc_data['Data']['MinSoC0to1']
-        dataDict['min_Offgrid_soc_0_to_1'] = soc_data['Data']['MinOffgridSoC0to1']
-        dataDict['latitude'] = data['Data']['StaticData']['Location']['Latitude']
-        dataDict['longitude'] = data['Data']['StaticData']['Location']['Longitude']
-        dataDict['battery_max_charge_power_kw'] = data['Data']['StaticData']['SiteDetails']['BatteryMaxChargePowerkW']
-        dataDict['battery_max_discharge_power_kw'] = data['Data']['StaticData']['SiteDetails']['BatteryMaxDischargePowerkW']
-        dataDict['battery_capacity_kwh'] = data['Data']['StaticData']['SiteDetails']['BatteryCapacitykWh']
-        dataDict['battery_usable_capacity_kwh'] = data['Data']['StaticData']['SiteDetails']['UsableBatteryCapacitykWh']
-        dataDict['system_type'] = data['Data']['StaticData']['SiteDetails']['SystemType']
-        dataDict['commissioning_date'] = data['Data']['StaticData']['CommissioningDate']
-        dataDict['site_id'] = data['Data']['StaticData']['Id']
-        dataDict['inverter_site_type'] = data['Data']['StaticData']['Type']
-        dataDict['model_name'] = data['Data']['Nodes'][0]['StaticData']['ModelName']
-        dataDict['battery_count'] = data['Data']['Nodes'][0]['StaticData']['BatteryCount']
-        dataDict['software_version'] = data['Data']['Nodes'][0]['StaticData']['SoftwareVersion']
-        dataDict['firmware_version'] = data['Data']['Nodes'][0]['StaticData']['FirmwareVersion']
-        for battery in data['Data']['Nodes'][0]['StaticData']['BatteryModels']:
-            if battery != 'Unknown':
-                batteryName = battery
-                dataDict[f'battery_{batteryId}_model'] = batteryName
-            else:
-                dataDict[f'battery_{batteryId}_model'] = batteryName
-            dataDict[f'battery_{batteryId}_current_negative_is_charging_a'] = data2['Data']['Battery']['Modules'][batteryId-1]['CurrentNegativeIsChargingA']
-            dataDict[f'battery_{batteryId}_voltage_v'] =  data2['Data']['Battery']['Modules'][batteryId-1]['VoltageV']
-            dataDict[f'battery_{batteryId}_power_negative_is_charging_kw'] =  data2['Data']['Battery']['Modules'][batteryId-1]['PowerNegativeIsChargingkW']
-            dataDict[f'battery_{batteryId}_soc_0to1'] =  data2['Data']['Battery']['Modules'][batteryId-1]['SoC0To1']
-            batteryId += 1
-        for cabinet in data2['Data']['Battery']['Cabinets']:
-            dataDict[f'battery_cabinet_{cabinetId}_temperature_c'] = cabinet['TemperatureC']
-            dataDict[f'battery_cabinet_{cabinetId}_fan_state'] = cabinet['FanState']
-            cabinetId += 1
-        dataDict['inverter_serial_number'] = data['Data']['Nodes'][0]['StaticData']['Id']
-        dataDict['timestamp_utc'] = data2['Data']['TimestampUtc']
-        dataDict['battery_soc_instantaneous_0to1'] = data2['Data']['BatterySoCInstantaneous0to1']
-        dataDict['battery_power_negative_is_charging_kw'] = data2['Data']['BatteryPowerNegativeIsChargingkW']
-        dataDict['battery_charge_all_time_energy_kwh'] = data2['Data']['BatteryChargeAllTimeEnergykWh']
-        dataDict['battery_discharge_all_time_energy_kwh'] = data2['Data']['BatteryDischargeAllTimeEnergykWh']
-        dataDict['status'] = data2['Data']['Status']
-        dataDict['battery_current_negative_is_charging_a'] = data2['Data']['Battery']['CurrentNegativeIsChargingA']
-        dataDict['battery_voltage_v'] = data2['Data']['Battery']['VoltageV']
-        dataDict['battery_voltage_type'] = data2['Data']['Battery']['VoltageType']
-        dataDict['battery_no_of_modules'] = data2['Data']['Battery']['NumberOfModules']
-        
-        dataDict['battery_currently_stored_kwh'] = (data['Data']['StaticData']['SiteDetails']['BatteryCapacitykWh'] * data2['Data']['BatterySoCInstantaneous0to1'] )
-        dataDict['battery_currently_usable_kwh'] = round(data['Data']['StaticData']['SiteDetails']['BatteryCapacitykWh'] * (data2['Data']['BatterySoCInstantaneous0to1']- soc_data['Data']['MinSoC0to1']),2)
-        return dataDict
-        
