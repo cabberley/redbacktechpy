@@ -49,7 +49,7 @@ class RedbackTechClient:
         self.timeout: int = timeout
         self.serial_numbers: list[str] | None = None
         self._session1: ClientSession = session1 if session1 else ClientSession()
-        self._session2: ClientSession = session2 if session2 else ClientSession()
+        self._session2: None # ClientSession = session2 if session2 else ClientSession()
         self.token: str | None = None
         self.token_type: str | None = None
         self.token_expiration: datetime | None = None
@@ -159,7 +159,7 @@ class RedbackTechClient:
         
     async def _portal_login(self) -> None:
         """Login to Redback Portal and obtain token."""
-        self._session2.cookie_jar.clear()
+        self._session2 = ClientSession() #.cookie_jar.clear()
         login_url = f'{BaseUrl.PORTAL}{Endpoint.PORTAL_LOGIN}'
         response = await self._portal_get(login_url, {}, {})
         await self._get_portal_token(response, 1)
@@ -188,7 +188,9 @@ class RedbackTechClient:
         self._GAFToken = None
         await self._portal_login()
         if self._GAFToken is not None:
+            await self._session2.close()
             return True 
+        await self._session2.close()
         return False
 
     async def delete_inverter_schedule(self, device_id: str, schedule_id: str) -> dict[str, Any]:
@@ -280,10 +282,12 @@ class RedbackTechClient:
                 break
         if Mode_override:
             self.mode = 'Auto'
+            self.power = 0
+            self.duration = 0
         else:
             self.mode = self._inverter_control_settings[device_id]['power_setting_mode']
-        self.power = self._inverter_control_settings[device_id]['power_setting_watts']
-        self.duration = self._inverter_control_settings[device_id]['power_setting_duration']
+            self.power = self._inverter_control_settings[device_id]['power_setting_watts']
+            self.duration = self._inverter_control_settings[device_id]['power_setting_duration']
         await self._portal_login()
         
         full_url = f'{BaseUrl.PORTAL}{Endpoint.PORTAL_CONFIGURE}{self.serial_number}'
@@ -307,6 +311,7 @@ class RedbackTechClient:
         }  
         full_url = f'{BaseUrl.PORTAL}{Endpoint.PORTAL_INVERTER_SET}'
         await self._portal_post(full_url, headers, data)
+        await self._session2.close()
         return
     
     async def update_inverter_control_values(self, device_id, data_key, data_value):
