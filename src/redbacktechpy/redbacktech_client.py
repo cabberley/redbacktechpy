@@ -475,7 +475,7 @@ class RedbackTechClient:
                 #self._redback_devices.append(self._flatBatterys)
             #await self._add_site_load_to_entities(self._redback_site_load, response1)
             await self._create_datetime_entities(response1)
-            await self._add_additional_entities(self._redback_site_load, response1)
+            await self._add_additional_entities(self._redback_site_load[serial_number], response1)
             await self._create_device_info_inverter(response1)
         self._device_info_refresh_time = datetime.now() + timedelta(seconds=DEVICEINFOREFRESH)
         return 
