@@ -67,6 +67,7 @@ class RedbackTechClient:
         self._inverter_control_settings = {}
         self._redback_schedule_selected = {}
         self._redback_temp_voltage = {}
+        self._redback_active_schedule = {}
     
     async def get_redback_data(self):
         """Get Redback Data."""
@@ -209,7 +210,6 @@ class RedbackTechClient:
         }
         await self._api_delete(url=f'{BaseUrl.API}{Endpoint.API_SCHEDULE_DELETE_BY_SERIALNUMBER_SCHEDULEID}{self.serial_number}' + '/' + schedule_id, headers=headers, data='' )
         
-
     async def delete_all_inverter_schedules(self, device_id: str):
         self.device_id = device_id
         self._redback_schedule_selected.update([(self.device_id,{'schedule_id': None})])
@@ -227,6 +227,13 @@ class RedbackTechClient:
                 await self._api_delete(url=f'{BaseUrl.API}{Endpoint.API_SCHEDULE_DELETE_BY_SERIALNUMBER_SCHEDULEID}{self.serial_number}' + '/' + schedule['schedule_id'], headers=headers, data='' )
                 
         #await self.set_inverter_mode_portal(device_id, True)
+        return
+
+    async def create_schedule_service(self, device_id: str, mode: str, power: int, duration: int, start_time: datetime) -> dict[str, Any]:
+        """Create schedule service."""
+        self.device_id = device_id
+        self._inverter_control_settings.update([(self.device_id,{'power_setting_mode': mode, 'power_setting_watts': power, 'power_setting_duration': duration, 'start_time': start_time})])
+        await self.set_inverter_schedule(device_id)
         return
     
     async def set_inverter_schedule(self, device_id):
@@ -822,6 +829,8 @@ class RedbackTechClient:
         id_temp = data['Data']['Schedules'][0]['SerialNumber']
         id_temp = id_temp[-4:] + 'inv'
         id_temp = id_temp.lower()
+        temp_timenow = datetime.now(timezone.utc)
+        temp_active_event = False
         for schedule in data['Data']['Schedules']:
             days =0
             if schedule['Duration'].find('.')> -1:
@@ -842,6 +851,37 @@ class RedbackTechClient:
                 'device_type': 'inverter',         
             }
             self._redback_schedules.append(dataDict)
+            if temp_timenow >= datetime.fromisoformat((schedule['StartTimeUtc']).replace('Z','+00:00')) and temp_timenow <= end_time:
+                temp_active_event = True
+                active_event = {'value': datetime.fromisoformat((schedule['StartTimeUtc']).replace('Z','+00:00')), 'entity_name': 'active_event_start_time', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'datetime.datetime' }
+                self._redback_entities.append(active_event)
+                active_event = {'value': end_time, 'entity_name': 'active_event_end_time', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'datetime.datetime' }
+                self._redback_entities.append(active_event)
+                active_event = {'value': schedule['Duration'], 'entity_name': 'active_event_duration', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'number.string' }
+                self._redback_entities.append(active_event)
+                active_event = {'value': schedule['DesiredMode']['InverterMode'], 'entity_name': 'active_event_inverter_mode', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'select.string', 'options': INVERTER_MODES }
+                self._redback_entities.append(active_event)
+                active_event = {'value': schedule['DesiredMode']['ArgumentInWatts'], 'entity_name': 'active_event_power_w', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'number.string' }
+                self._redback_entities.append(active_event)
+                active_event = {'value': schedule['ScheduleId'], 'entity_name': 'active_event_schedule_id', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'number.string' }
+                self._redback_entities.append(active_event)
+                active_event = {'value': True, 'entity_name': 'active_event', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'number.string' }
+                self._redback_entities.append(active_event)
+        if temp_active_event is False:    
+            active_event = {'value': None, 'entity_name': 'active_event_start_time', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'datetime.datetime' }
+            self._redback_entities.append(active_event)
+            active_event = {'value': None, 'entity_name': 'active_event_end_time', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'datetime.datetime' }
+            self._redback_entities.append(active_event)
+            active_event = {'value': 0, 'entity_name': 'active_event_duration', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'number.string' }
+            self._redback_entities.append(active_event)
+            active_event = {'value': None, 'entity_name': 'active_event_inverter_mode', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'select.string', 'options': INVERTER_MODES }
+            self._redback_entities.append(active_event)
+            active_event = {'value': 0, 'entity_name': 'active_event_power_w', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'number.string' }
+            self._redback_entities.append(active_event)
+            active_event = {'value': None, 'entity_name': 'active_event_schedule_id', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'number.string' }
+            self._redback_entities.append(active_event)
+            active_event = {'value': False, 'entity_name': 'active_event', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'number.string' }
+            self._redback_entities.append(active_event)
         return
     
     async def _convert_responses_to_inverter_entities(self, data, data2) -> None:
