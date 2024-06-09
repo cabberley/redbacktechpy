@@ -470,7 +470,7 @@ class RedbackTechClient:
             self._redback_site_load[serial_number]=0
             #process and prepare base data wanted
             await self._convert_responses_to_inverter_entities(response1, response2)
-            await self._convert_responses_to_schedule_entities(response3)
+            await self._convert_responses_to_schedule_entities(response3, response1)
             await self._create_number_entities(response1)
             await self._create_select_entities(response1, response3)
             
@@ -823,50 +823,49 @@ class RedbackTechClient:
         self._redback_selects.append(dataDict)
         return
         
-    async def _convert_responses_to_schedule_entities(self, data) -> None:
-        if len(data['Data']['Schedules']) == 0:
-            return
-        id_temp = data['Data']['Schedules'][0]['SerialNumber']
+    async def _convert_responses_to_schedule_entities(self, data, data2) -> None:
+        id_temp = data2['Data']['Nodes'][0]['StaticData']['Id']
         id_temp = id_temp[-4:] + 'inv'
         id_temp = id_temp.lower()
         temp_timenow = datetime.now(timezone.utc)
         temp_active_event = False
-        for schedule in data['Data']['Schedules']:
-            days =0
-            if schedule['Duration'].find('.')> -1:
-                days = int(schedule['Duration'].split('.')[0]) *24*60
-                schedule['Duration'] = schedule['Duration'].split('.')[1]
-            schedule['Duration'] = int(schedule['Duration'].split(':')[0])*60 + int(schedule['Duration'].split(':')[1]) + days
-            end_time = (datetime.fromisoformat((schedule['StartTimeUtc']).replace('Z','+00:00')) + timedelta(minutes=schedule['Duration']))
-            dataDict = {
-                'schedule_id': schedule['ScheduleId'],
-                'serial_number': schedule['SerialNumber'],
-                'siteid': schedule['SiteId'],
-                'start_time_utc': datetime.fromisoformat((schedule['StartTimeUtc']).replace('Z','+00:00')),
-                'end_time': end_time,
-                'duration': schedule['Duration'],
-                'inverter_mode': schedule['DesiredMode']['InverterMode'],
-                'power_w': schedule['DesiredMode']['ArgumentInWatts'],   
-                'device_id': id_temp,
-                'device_type': 'inverter',         
-            }
-            self._redback_schedules.append(dataDict)
-            if temp_timenow >= datetime.fromisoformat((schedule['StartTimeUtc']).replace('Z','+00:00')) and temp_timenow <= end_time:
-                temp_active_event = True
-                active_event = {'value': datetime.fromisoformat((schedule['StartTimeUtc']).replace('Z','+00:00')), 'entity_name': 'active_event_start_time', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'datetime.datetime' }
-                self._redback_entities.append(active_event)
-                active_event = {'value': end_time, 'entity_name': 'active_event_end_time', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'datetime.datetime' }
-                self._redback_entities.append(active_event)
-                active_event = {'value': schedule['Duration'], 'entity_name': 'active_event_duration', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'number.string' }
-                self._redback_entities.append(active_event)
-                active_event = {'value': schedule['DesiredMode']['InverterMode'], 'entity_name': 'active_event_inverter_mode', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'select.string', 'options': INVERTER_MODES }
-                self._redback_entities.append(active_event)
-                active_event = {'value': schedule['DesiredMode']['ArgumentInWatts'], 'entity_name': 'active_event_power_w', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'number.string' }
-                self._redback_entities.append(active_event)
-                active_event = {'value': schedule['ScheduleId'], 'entity_name': 'active_event_schedule_id', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'number.string' }
-                self._redback_entities.append(active_event)
-                active_event = {'value': True, 'entity_name': 'active_event', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'number.string' }
-                self._redback_entities.append(active_event)
+        if len(data['Data']['Schedules']) != 0:
+            for schedule in data['Data']['Schedules']:
+                days =0
+                if schedule['Duration'].find('.')> -1:
+                    days = int(schedule['Duration'].split('.')[0]) *24*60
+                    schedule['Duration'] = schedule['Duration'].split('.')[1]
+                schedule['Duration'] = int(schedule['Duration'].split(':')[0])*60 + int(schedule['Duration'].split(':')[1]) + days
+                end_time = (datetime.fromisoformat((schedule['StartTimeUtc']).replace('Z','+00:00')) + timedelta(minutes=schedule['Duration']))
+                dataDict = {
+                    'schedule_id': schedule['ScheduleId'],
+                    'serial_number': schedule['SerialNumber'],
+                    'siteid': schedule['SiteId'],
+                    'start_time_utc': datetime.fromisoformat((schedule['StartTimeUtc']).replace('Z','+00:00')),
+                    'end_time': end_time,
+                    'duration': schedule['Duration'],
+                    'inverter_mode': schedule['DesiredMode']['InverterMode'],
+                    'power_w': schedule['DesiredMode']['ArgumentInWatts'],   
+                    'device_id': id_temp,
+                    'device_type': 'inverter',         
+                }
+                self._redback_schedules.append(dataDict)
+                if temp_timenow >= datetime.fromisoformat((schedule['StartTimeUtc']).replace('Z','+00:00')) and temp_timenow <= end_time:
+                    temp_active_event = True
+                    active_event = {'value': datetime.fromisoformat((schedule['StartTimeUtc']).replace('Z','+00:00')), 'entity_name': 'active_event_start_time', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'datetime.datetime' }
+                    self._redback_entities.append(active_event)
+                    active_event = {'value': end_time, 'entity_name': 'active_event_end_time', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'datetime.datetime' }
+                    self._redback_entities.append(active_event)
+                    active_event = {'value': schedule['Duration'], 'entity_name': 'active_event_duration', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'number.string' }
+                    self._redback_entities.append(active_event)
+                    active_event = {'value': schedule['DesiredMode']['InverterMode'], 'entity_name': 'active_event_inverter_mode', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'select.string', 'options': INVERTER_MODES }
+                    self._redback_entities.append(active_event)
+                    active_event = {'value': schedule['DesiredMode']['ArgumentInWatts'], 'entity_name': 'active_event_power_w', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'number.string' }
+                    self._redback_entities.append(active_event)
+                    active_event = {'value': schedule['ScheduleId'], 'entity_name': 'active_event_schedule_id', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'number.string' }
+                    self._redback_entities.append(active_event)
+                    active_event = {'value': True, 'entity_name': 'active_event', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'number.string' }
+                    self._redback_entities.append(active_event)
         if temp_active_event is False:    
             active_event = {'value': None, 'entity_name': 'active_event_start_time', 'device_id': id_temp, 'device_type': 'inverter', 'type_set': 'datetime.datetime' }
             self._redback_entities.append(active_event)
