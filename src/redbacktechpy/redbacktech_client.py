@@ -235,7 +235,7 @@ class RedbackTechClient:
         self._inverter_control_settings.update([(self.device_id,{'power_setting_mode': mode, 'power_setting_watts': power, 'power_setting_duration': duration, 'start_time': start_time})])
         await self.set_inverter_schedule(device_id)
         return
-    
+
     async def set_inverter_schedule(self, device_id):
         """Set inverter schedule."""
         self.device_id = device_id
@@ -247,7 +247,7 @@ class RedbackTechClient:
         self.power = self._inverter_control_settings[device_id]['power_setting_watts']
         self.duration = self._inverter_control_settings[device_id]['power_setting_duration']
         self.start_time = self._inverter_control_settings[device_id]['start_time']
-               
+
         ### convert duration to format
         days = int(self.duration/1440)
         if days < 0:
@@ -256,7 +256,7 @@ class RedbackTechClient:
         minutes = ('00'+str(int(self.duration - (hours * 60))))[-2:]
         hours = ('00'+str(hours))[-2:]
         duration_str = f'{days}.{hours}:{minutes}:00'
-        
+
         post_data = {
             'SerialNumber': self.serial_number,
             'UserNotes': 'Home Assistant Created Inverter Schedule',
@@ -970,10 +970,7 @@ class RedbackTechClient:
         self._redback_entities.append(dataDict)
         dataDict = {'value': data2['Data']['Inverters'][0]['PowerMode']['PowerW'],'entity_name': 'power_mode_power_w', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(dataDict)
-
-        
         for pv in data2['Data']['PVs']:
-            
             entity_name_temp = f'mppt_{pvId}_current_a'
             dataDict = {'value': pv['CurrentA'],'entity_name': entity_name_temp, 'device_id': id_temp, 'device_type': 'inverter'}
             self._redback_entities.append(dataDict)
@@ -1028,7 +1025,9 @@ class RedbackTechClient:
         self._redback_entities.append(dataDict)
         dataDict = {'value': round(phase_power_net_sum,3), 'entity_name': 'inverter_phase_total_active_net_power_instantaneous_kw', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(dataDict)
-        
+        pv_percent = (data2['Data']['PvPowerInstantaneouskW'] / data['Data']['StaticData']['SiteDetails']['PanelSizekW']) * 100
+        dataDict = {'value': round(pv_percent,0), 'entity_name': 'pv_generation_instantaneous_percent_capacity', 'device_id': id_temp, 'device_type': 'inverter'}
+        self._redback_entities.append(dataDict)        
         self._redback_site_load[(data['Data']['Nodes'][0]['StaticData']['Id'])] = phase_power_net_sum + data2['Data']['PvPowerInstantaneouskW']
         return
         
