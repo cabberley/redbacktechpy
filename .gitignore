@@ -163,3 +163,4 @@ cython_debug/
 src/redbacktechpy/redbacktech_client.py.bak
 src/redbacktechpy/constants.py.bak
 src/redbacktechpy/model.py.bak
+src/redbacktechpy/test.py

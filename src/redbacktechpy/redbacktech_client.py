@@ -235,7 +235,7 @@ class RedbackTechClient:
         self._inverter_control_settings.update([(self.device_id,{'power_setting_mode': mode, 'power_setting_watts': power, 'power_setting_duration': duration, 'start_time': start_time})])
         await self.set_inverter_schedule(device_id)
         return
-    
+
     async def set_inverter_schedule(self, device_id):
         """Set inverter schedule."""
         self.device_id = device_id
@@ -247,7 +247,7 @@ class RedbackTechClient:
         self.power = self._inverter_control_settings[device_id]['power_setting_watts']
         self.duration = self._inverter_control_settings[device_id]['power_setting_duration']
         self.start_time = self._inverter_control_settings[device_id]['start_time']
-               
+
         ### convert duration to format
         days = int(self.duration/1440)
         if days < 0:
@@ -256,7 +256,7 @@ class RedbackTechClient:
         minutes = ('00'+str(int(self.duration - (hours * 60))))[-2:]
         hours = ('00'+str(hours))[-2:]
         duration_str = f'{days}.{hours}:{minutes}:00'
-        
+
         post_data = {
             'SerialNumber': self.serial_number,
             'UserNotes': 'Home Assistant Created Inverter Schedule',
@@ -413,42 +413,41 @@ class RedbackTechClient:
     
     async def _get_config_by_multiple_serial(self, serial_numbers: str | None=None) -> dict[str, Any]:
         self._serial_numbers: str = serial_numbers if serial_numbers else self.serial_numbers
-        
+
         if self._serial_numbers is None:
             self._serial_numbers = await self._get_inverter_list()
-        
+
         await self._check_token()
-        
+
         headers = {
             'Authorization': self.token,
             'Content_type': 'text/json',
             'accept': 'text/plain'
         }
-        
+
         full_url = f'{BaseUrl.API}{Endpoint.API_STATIC_MULTIPLE_BY_SERIAL}'
         response = await self._api_post_json(full_url, headers, self._serial_numbers)
-       
         return response
 
     async def _get_site_list(self) -> dict[str, Any]:
         self.site_ids = []
         await self._check_token()
-        
+
         headers = {
             'Authorization': self.token
         }
         full_url = f'{BaseUrl.API}{Endpoint.API_SITES}'
         response = await self._api_get(full_url, headers, {})
-        
+
         for site in response['Data']:
             self.site_ids.append(site)
         return self.site_ids
-            
+
     async def close_sessions(self) -> None:
         """Close sessions."""
         await self._session1.close()
         await self._session2.close()
-        return True      
+        return True
 
     async def _create_device_info(self) -> None:
         if not await self._check_device_info_refresh():
@@ -461,32 +460,32 @@ class RedbackTechClient:
         self._redback_numbers = []
         self._redback_selects = []
         self._redback_schedule_datetime = []
-        
+  
         #For each Inverter found prepare the data wanted
         for serial_number in self._serial_numbers:
             response1 = await self._get_static_by_serial(serial_number)
             response2 = await self._get_dynamic_by_serial(serial_number)
-            response3 = await self._get_schedules_by_serial(serial_number)
+
             self._redback_site_load[serial_number]=0
             #process and prepare base data wanted
             await self._convert_responses_to_inverter_entities(response1, response2)
-            await self._convert_responses_to_schedule_entities(response3, response1)
-            await self._create_number_entities(response1)
-            await self._create_select_entities(response1, response3)
-            
+
             #If we find a battery attached to the inverter process and prepare additional data wanted
             if response1['Data']['Nodes'][0]['StaticData']['BatteryCount'] > 0:
                 soc_data = await self._get_config_by_serial(response1['Data']['Nodes'][0]['StaticData']['Id'])
                 await self._convert_responses_to_battery_entities(response1, response2, soc_data)
                 await self._create_device_info_battery(response1)
-                #self._redback_devices.append(self._flatBatterys)
-            #await self._add_site_load_to_entities(self._redback_site_load, response1)
-            await self._create_datetime_entities(response1)
+                response3 = await self._get_schedules_by_serial(serial_number)
+                await self._convert_responses_to_schedule_entities(response3, response1)
+                await self._create_number_entities(response1)
+                await self._create_select_entities(response1, response3)
+                await self._create_datetime_entities(response1)
+                await self._add_selected_schedule(response1)
             await self._add_additional_entities(self._redback_site_load[serial_number], response1)
             await self._create_device_info_inverter(response1)
         self._device_info_refresh_time = datetime.now() + timedelta(seconds=DEVICEINFOREFRESH)
-        return 
-    
+        return
+
     async def _create_dynamic_info(self) -> None:
 
         self._serial_numbers = await self._get_inverter_list()
@@ -703,7 +702,7 @@ class RedbackTechClient:
         current_dt = datetime.now()
         if (self.token or self.token_expiration) is None:
             await self._api_login()
-        elif (self.token_expiration-current_dt).total_seconds() < 3600:
+        elif (self.token_expiration-current_dt).total_seconds() < 300:
             await self._api_login()
         else:
             return None
@@ -970,10 +969,7 @@ class RedbackTechClient:
         self._redback_entities.append(dataDict)
         dataDict = {'value': data2['Data']['Inverters'][0]['PowerMode']['PowerW'],'entity_name': 'power_mode_power_w', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(dataDict)
-
-        
         for pv in data2['Data']['PVs']:
-            
             entity_name_temp = f'mppt_{pvId}_current_a'
             dataDict = {'value': pv['CurrentA'],'entity_name': entity_name_temp, 'device_id': id_temp, 'device_type': 'inverter'}
             self._redback_entities.append(dataDict)
@@ -1028,7 +1024,9 @@ class RedbackTechClient:
         self._redback_entities.append(dataDict)
         dataDict = {'value': round(phase_power_net_sum,3), 'entity_name': 'inverter_phase_total_active_net_power_instantaneous_kw', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(dataDict)
-        
+        pv_percent = (data2['Data']['PvPowerInstantaneouskW'] / data['Data']['StaticData']['SiteDetails']['PanelSizekW']) * 100
+        dataDict = {'value': round(pv_percent,0), 'entity_name': 'pv_generation_instantaneous_percent_capacity', 'device_id': id_temp, 'device_type': 'inverter'}
+        self._redback_entities.append(dataDict)        
         self._redback_site_load[(data['Data']['Nodes'][0]['StaticData']['Id'])] = phase_power_net_sum + data2['Data']['PvPowerInstantaneouskW']
         return
         
@@ -1159,6 +1157,12 @@ class RedbackTechClient:
         value_temp= round(site_load_data,3)
         dataDict = {'value': value_temp,'entity_name': 'inverter_site_load_instantaneous_kw', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(dataDict)
+        return
+    
+    async def _add_selected_schedule(self, data):
+        id_temp = data['Data']['Nodes'][0]['StaticData']['Id']
+        id_temp = id_temp[-4:] + 'inv'
+        id_temp = id_temp.lower()
         if self._redback_schedule_selected[id_temp]['schedule_id'] != None:
             #add schedule to entities
             for schedule in self._redback_schedules:
@@ -1184,5 +1188,4 @@ class RedbackTechClient:
             self._redback_entities.append(dataDict)
             dataDict = {'value': 'ChargeBattery','entity_name': 'scheduled_inverter_mode', 'device_id': id_temp, 'device_type': 'inverter'}
             self._redback_entities.append(dataDict)
-
-        return    
+        return
