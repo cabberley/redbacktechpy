@@ -6,8 +6,8 @@ from math import sqrt
 import asyncio
 import logging
 from aiohttp import ClientResponse, ClientSession
-
 from bs4 import BeautifulSoup
+
 from .constants import (
     BaseUrl,
     Endpoint,
@@ -287,7 +287,7 @@ class RedbackTechClient:
     async def set_inverter_mode_portal(self, device_id: str, mode='Auto', power = 0, mode_override=False):
         """Set inverter mode."""
         for device in self._redback_device_info:
-            if device['identifiers'] == device_id:
+            if device['identifiers'] == device_id+'inv':
                 serial_number = device['serial_number']
                 ross_version = device['sw_version']
                 break
