@@ -946,14 +946,14 @@ class RedbackTechClient:
         return
 
     async def _create_op_env_select_entities(self, site, device_id) -> None:
-        if self._redback_op_env_selected.get(site) is None:
-            self._redback_op_env_selected.update([(site,{'schedule_selector': None})])
+        if self._redback_op_env_selected.get(device_id) is None:
+            self._redback_op_env_selected.update([(device_id,{'schedule_selector': None})])
         if self._redback_open_env_data is not None:
             schedule_options=[]
             for schedule in self._redback_open_env_data:
                 if schedule['data']['SiteId'] == site:
                     schedule_options.append(schedule['data']['schedule_selector'])
-            data_dict = {'value': self._redback_op_env_selected[site]['schedule_selector'], 'entity_name': 'op_env_id_selected', 'device_id': device_id, 'device_type': 'inverter', 'type_set': 'select.string', 'options': schedule_options}
+            data_dict = {'value': self._redback_op_env_selected[device_id]['schedule_selector'], 'entity_name': 'op_env_id_selected', 'device_id': device_id, 'device_type': 'inverter', 'type_set': 'select.string', 'options': schedule_options}
         else:
             data_dict = {'value': None, 'entity_name': 'op_env_id_selected', 'device_id': device_id, 'device_type': 'inverter', 'type_set': 'select.string', 'options': None}
         self._redback_selects.append(data_dict)
@@ -1394,10 +1394,10 @@ class RedbackTechClient:
 
     async def _add_selected_op_env_entities(self, site, device_id):
         """add selected operating envelope to entities"""
-        if self._redback_op_env_selected[site]['schedule_selector'] is not None:
+        if self._redback_op_env_selected[device_id]['schedule_selector'] is not None:
             #add op_env to entities
             for op_env in self._redback_open_env_data:
-                if op_env['data']['schedule_selector'] == self._redback_op_env_selected[site]['schedule_selector']:
+                if op_env['data']['schedule_selector'] == self._redback_op_env_selected[device_id]['schedule_selector']:
                     data_dict = {'value': op_env['data']['StartAtUtc'],'entity_name': 'op_env_selected_start_time', 'device_id': device_id, 'device_type': 'OperationEnvelope'}
                     self._redback_entities.append(data_dict)
                     data_dict = {'value': op_env['data']['EndAtUtc'],'entity_name': 'op_env_selected_end_time', 'device_id': device_id, 'device_type': 'OperationEnvelope'}
