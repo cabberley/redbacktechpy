@@ -410,8 +410,6 @@ class RedbackTechClient:
             'accept': 'text/plain'
         }
         post_data = self._redback_op_env_create_settings[device_id]
-        post_data['SiteId'] = device_id[-3:]
-        
         full_url = f'{BaseUrl.API}{Endpoint.API_OPENVELOPE_CREATE}'
         response = await self._api_post_json(full_url, headers, post_data)
         return response
@@ -424,13 +422,13 @@ class RedbackTechClient:
         self._redback_open_env_data = []
         temp_timenow = datetime.now(timezone.utc)
         for site in self._redback_site_ids:
-            device_id = site + 'env'
+            device_id = site[-4:] + 'env'
             self._redback_op_env_data.setdefault(site, None)
             self._redback_op_env_active.setdefault(site, None)
             await self._create_op_env_active_entities(data=None, device_id=device_id, site=site)
-            await self._create_op_env_number_entities(device_id)
-            await self._create_op_env_text_entities(device_id)
-            await self._create_op_env_datetime_entities(device_id)
+            await self._create_op_env_number_entities(device_id, site)
+            await self._create_op_env_text_entities(device_id, site)
+            await self._create_op_env_datetime_entities(device_id, site)
             
             response = await self._get_op_env_by_site(site)
             if response['TotalCount'] > 0:
@@ -844,7 +842,7 @@ class RedbackTechClient:
 
     async def _create_device_info_op_env(self) -> None:
         for site in self._redback_site_ids:
-            id_temp = site + 'env'
+            id_temp = site[-4:] + 'env'
             data_dict = {
                 'identifiers': id_temp,
                 'name': site + ' - Operating Envelope',
@@ -871,9 +869,9 @@ class RedbackTechClient:
         self._redback_device_info.append(data_dict)
         return
 
-    async def _create_op_env_datetime_entities(self, device_id) -> None:
-        if self._redback_op_env_create_settings.get(device_id) is None:    
-            self._redback_op_env_create_settings.update([(device_id,{'EventId': '','MaxImportPowerW': 0,'MaxExportPowerW': 0,'MaxDischargePowerW': 0,'MaxChargePowerW': 0,'MaxGenerationPowerVA': 0, 'StartAtUtc': datetime.now(timezone.utc), 'EndAtUtc': datetime.now(timezone.utc)})])
+    async def _create_op_env_datetime_entities(self, device_id, site) -> None:
+        if self._redback_op_env_create_settings.get(device_id) is None:
+            self._redback_op_env_create_settings.update([(device_id,{'EventId': '','MaxImportPowerW': 0,'MaxExportPowerW': 0,'MaxDischargePowerW': 0,'MaxChargePowerW': 0,'MaxGenerationPowerVA': 0, 'StartAtUtc': datetime.now(timezone.utc), 'EndAtUtc': datetime.now(timezone.utc), 'SiteId': site})])
         data_dict = {'value': self._redback_op_env_create_settings[device_id]['StartAtUtc'], 'entity_name': 'op_env_create_start_time', 'device_id': device_id, 'device_type': 'OperatingEnvelope', 'type_set': 'datetime.datetime' }
         self._redback_schedule_datetime.append(data_dict)
         data_dict = {'value': self._redback_op_env_create_settings[device_id]['EndAtUtc'], 'entity_name': 'op_env_create_end_time', 'device_id': device_id, 'device_type': 'OperatingEnvelope', 'type_set': 'datetime.datetime' }
@@ -891,9 +889,9 @@ class RedbackTechClient:
         self._redback_schedule_datetime.append(data_dict)
         return
 
-    async def _create_op_env_number_entities(self, device_id) -> None:
+    async def _create_op_env_number_entities(self, device_id, site) -> None:
         if self._redback_op_env_create_settings.get(device_id) is None:
-            self._redback_op_env_create_settings.update([(device_id,{'EventId': '','MaxImportPowerW': 0,'MaxExportPowerW': 0,'MaxDischargePowerW': 0,'MaxChargePowerW': 0,'MaxGenerationPowerVA': 0, 'StartAtUtc': datetime.now(timezone.utc), 'EndAtUtc': datetime.now(timezone.utc)})])
+            self._redback_op_env_create_settings.update([(device_id,{'EventId': '','MaxImportPowerW': 0,'MaxExportPowerW': 0,'MaxDischargePowerW': 0,'MaxChargePowerW': 0,'MaxGenerationPowerVA': 0, 'StartAtUtc': datetime.now(timezone.utc), 'EndAtUtc': datetime.now(timezone.utc), 'SiteId': site})])
         data_dict = {'value': self._redback_op_env_create_settings[device_id]['MaxImportPowerW'], 'entity_name': 'op_env_create_max_import', 'device_id': device_id, 'device_type': 'OperatingEnvelope', 'type_set': 'number.string' }
         self._redback_numbers.append(data_dict)
         data_dict = {'value': self._redback_op_env_create_settings[device_id]['MaxExportPowerW'], 'entity_name': 'op_env_create_max_export', 'device_id': device_id, 'device_type': 'OperatingEnvelope', 'type_set': 'number.string' }
@@ -906,9 +904,9 @@ class RedbackTechClient:
         self._redback_numbers.append(data_dict)
         return
 
-    async def _create_op_env_text_entities(self, device_id) -> None:
+    async def _create_op_env_text_entities(self, device_id, site) -> None:
         if self._redback_op_env_create_settings.get(device_id) is None:    
-            self._redback_op_env_create_settings.update([(device_id,{'EventId': '','MaxImportPowerW': 0,'MaxExportPowerW': 0,'MaxDischargePowerW': 0,'MaxChargePowerW': 0,'MaxGenerationPowerVA': 0, 'StartAtUtc': datetime.now(timezone.utc), 'EndAtUtc': datetime.now(timezone.utc)})])
+            self._redback_op_env_create_settings.update([(device_id,{'EventId': '','MaxImportPowerW': 0,'MaxExportPowerW': 0,'MaxDischargePowerW': 0,'MaxChargePowerW': 0,'MaxGenerationPowerVA': 0, 'StartAtUtc': datetime.now(timezone.utc), 'EndAtUtc': datetime.now(timezone.utc), 'SiteId': site})])
         data_dict = {'value': self._redback_op_env_create_settings[device_id]['EventId'], 'entity_name': 'op_env_create_event_id', 'device_id': device_id, 'device_type': 'OperatingEnvelope', 'type_set': 'text.string' }
         self._redback_text.append(data_dict)
         return
