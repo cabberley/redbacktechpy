@@ -32,6 +32,7 @@ from .model import (
     Numbers,
     ScheduleInfo,
     ScheduleDateTime,
+    Text,
 )
 from .exceptions import (
         AuthError,
