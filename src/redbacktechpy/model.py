@@ -10,8 +10,8 @@ class RedbackTechData:
     """Dataclass for all RedbackTech Data."""
 
     user_id: str
-    inverters: Optional[dict[int, Any]] = None
-    batterys: Optional[dict[int, Any]] = None
+    openvelopes: Optional[dict[int, Any]] = None
+    text: Optional[dict[int, Any]] = None
     entities: Optional[dict[int, Any]] = None
     devices: Optional[dict[int, Any]] = None
     numbers: Optional[dict[int, Any]] = None
@@ -45,6 +45,14 @@ class Inverters:
     data: dict[str, Any]
     type: str
 
+@dataclass
+class OpEnvelopes:
+    """Dataclass for Redback Inverters."""
+
+    id: str
+    site_id: str
+    data: dict[str, Any]
+
 @dataclass    
 class Batterys:
     """Dataclass for RedBack Batteries."""
@@ -75,6 +83,16 @@ class Numbers:
     type: str
 
 @dataclass
+class ActiveSchedule:
+    """Dataclass for Redback Inverters."""
+
+    id: str
+    device_serial_number: str
+    data: dict[str, Any]
+    type: str
+
+
+@dataclass
 class Buttons:
     """Dataclass for Redback Inverters."""
 
@@ -83,6 +101,16 @@ class Buttons:
     data: dict[str, Any]
     type: str
     
+@dataclass
+class Text:
+    """Dataclass for Redback Inverters."""
+
+    id: str
+    site_id: str
+    data: dict[str, Any]
+
+
+
 @dataclass
 class Selects:
     """Dataclass for Redback Inverters."""

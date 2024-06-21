@@ -3,6 +3,9 @@ from .str_enum import StrEnum
 TIMEOUT = 5 * 60
 DEVICEINFOREFRESH = 30 * 60  #Number of seconds to wait before refreshing device info as it doesn't change very often
 
+OAUTH_SCOPE = 'api://f0ea23e1-8533-44ab-8592-509cff0774da/.default'
+OAUTH_GRANT_TYPE = 'client_credentials'
+
 AUTH_ERROR_CODES = [
     'unauthorized_client',
     'Login session expired.',
@@ -15,14 +18,23 @@ INVERTER_MODES = [
     'ImportPower',
     'ExportPower',
     'Conserve',
+    'Offgrid',
+    'Hibernate',
+    'BuyPower',
+    'SellPower',
+    'ForceChargeBattery',
+    'ForceDischargeBattery'
 ]
 
+
 class BaseUrl(StrEnum):
+    OAUTH = 'https://login.microsoftonline.com/'
     API = 'https://api.redbacktech.com/'
     PORTAL = 'https://portal.redbacktech.com/'
 
 class Endpoint(StrEnum):
     
+    API_OAUTH = 'fb46c16c-9144-45e0-87b7-f578abed629f/oauth2/v2.0/token'
     API_AUTH = 'Api/v2/Auth/token'
     API_SITES = 'Api/v2/EnergyData'
     API_NODES = 'Api/v2/EnergyData/With/Nodes'
@@ -35,7 +47,11 @@ class Endpoint(StrEnum):
     API_ENERGY_DYNAMIC_BY_SITE = 'Api/v2.21/EnergyData/{self.siteId}/Dynamic'
     API_SCHEDULE_CREATE = 'Api/v2/Schedule/Create/By/SerialNumber'  
     API_SCHEDULE_DELETE = 'Api/v2/Schedule/Delete/By/SerialNumber/'  #{serialNumber}/{scheduleId}
-    API_SCHEDULE_GET = '/Api/v2/Schedule/By/SerialNumber/' #{serialNumber}
+    API_SCHEDULE_GET = 'Api/v2/Schedule/By/SerialNumber/' #{serialNumber}
+    API_OPENVELOPE_DELETE_ALL = 'Api/v2/OperatingEnvelope/All'
+    API_OPENVELOPE_BY_EVENTID =  'Api/v2/OperatingEnvelope/By/EventId/' #{eventId} DELETE & GET
+    API_OPENVELOPE_CREATE = 'Api/v2/OperatingEnvelope/Create/By/Site'
+    API_OPENVELOPE_BY_SITE_ALL = 'Api/v2/OperatingEnvelope/By/Site/' #{siteId}
     PORTAL_LOGIN = 'Account/Login'
     PORTAL_CONFIGURE = 'productcontrol/Configure?serialNumber='
     PORTAL_INVERTER_SET = 'productcontrol/Index'
