@@ -44,7 +44,7 @@ LOGGER = logging.getLogger(__name__)
 class RedbackTechClient:
     """Redback Tech Client"""
 
-    def __init__(self, client_id: str, client_secret:str, portal_email: str, portal_password: str, session1: ClientSession | None = None, session2: ClientSession | None = None, timeout: int = TIMEOUT) -> None:
+    def __init__(self, client_id: str, client_secret:str, portal_email: str, portal_password: str, session1: ClientSession | None = None, session2: ClientSession | None = None, timeout: int = TIMEOUT, include_envelopes=True) -> None:
         self.client_id: str = client_id
         self.client_secret: str = client_secret
         self.portal_email: str = portal_email
@@ -53,6 +53,7 @@ class RedbackTechClient:
         self.serial_numbers: list[str] | None = None
         self._session1: ClientSession = session1 if session1 else ClientSession()
         self._session2: None # ClientSession = session2 if session2 else ClientSession()
+        self._include_envelopes: bool = include_envelopes
         self.token: str | None = None
         self.token_type: str | None = None
         self.token_expiration: datetime | None = None
@@ -88,7 +89,8 @@ class RedbackTechClient:
         """Get Redback Data."""
         #Check if we need to get a new device list
         await self._create_device_info()
-        await self._create_op_env_data()
+        if self._include_envelopes:
+            await self._create_op_env_data()
 
         op_envelope_data: dict[str, OpEnvelopes] = {}
         #inverter_data: dict[str, Inverters] = {}
@@ -377,8 +379,9 @@ class RedbackTechClient:
         self._redback_op_env_create_settings.update([(device_id, temp)])
         return
 
-    async def delete_all_envelopes(self) -> dict[str, Any]:
+    async def delete_all_envelopes(self, device_id,) -> dict[str, Any]:
         """Delete all envelopes."""
+        self._redback_op_env_selected.update([(device_id,{'schedule_selector': None})])
         await self._check_token()
         headers = {
             'Authorization': self.token,
@@ -389,8 +392,9 @@ class RedbackTechClient:
         await self._api_delete(full_url, headers, '')
         return
 
-    async def delete_op_env_by_id(self, op_env_id: str) -> dict[str, Any]:
+    async def delete_op_env_by_id(self, device_id, op_env_id: str) -> dict[str, Any]:
         """Delete op env by id."""
+        self._redback_op_env_selected.update([(device_id,{'schedule_selector': None})])
         await self._check_token()
         headers = {
             'Authorization': self.token,
@@ -410,6 +414,28 @@ class RedbackTechClient:
             'accept': 'text/plain'
         }
         post_data = self._redback_op_env_create_settings[device_id]
+        full_url = f'{BaseUrl.API}{Endpoint.API_OPENVELOPE_CREATE}'
+        response = await self._api_post_json(full_url, headers, post_data)
+        return response
+    
+    async def create_operating_envelope(self, event_id: str, start_at_utc , end_at_utc, site_id , max_import_power =0, max_export_power=0, max_discharge_power=0, max_charge_power=0, max_generation_power=0) -> dict[str, Any]:
+        """Create op envelope."""
+        await self._check_token()
+        post_data = {
+            'EventId': event_id,
+            'MaxImportPowerW': max_import_power,
+            'MaxExportPowerW': max_export_power,
+            'MaxDischargePowerW': max_discharge_power,
+            'MaxChargePowerW': max_charge_power,
+            'MaxGenerationPowerVA': max_generation_power,
+            'StartAtUtc': start_at_utc,
+            'EndAtUtc': end_at_utc,
+            'SiteId': site_id}
+        headers = {
+            'Authorization': self.token,
+            'Content_type': 'application/json',
+            'accept': 'text/plain'
+        }
         full_url = f'{BaseUrl.API}{Endpoint.API_OPENVELOPE_CREATE}'
         response = await self._api_post_json(full_url, headers, post_data)
         return response
