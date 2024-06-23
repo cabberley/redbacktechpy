@@ -304,6 +304,7 @@ class RedbackTechClient:
 
     async def set_inverter_mode_portal(self, device_id: str, mode='Auto', power = 0, mode_override=False):
         """Set inverter mode."""
+        LOGGER.debug('Setting inverter mode for %s to %s with power %s', device_id, mode, power)
         for device in self._redback_device_info:
             if device['identifiers'] == device_id+'inv':
                 serial_number = device['serial_number']
@@ -339,6 +340,7 @@ class RedbackTechClient:
             'RossVersion':ross_version,
             '__RequestVerificationToken':self._GAFToken     
         }
+        LOGGER.debug('Setting inverter mode data: %s ', data)
         full_url = f'{BaseUrl.PORTAL}{Endpoint.PORTAL_INVERTER_SET}'
         await self._portal_post(full_url, headers, data)
         await self._session2.close()
