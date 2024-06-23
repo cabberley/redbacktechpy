@@ -1,6 +1,6 @@
 [project]
 name = "redbacktechpy"
-version = "2024.6.7b6"
+version = "2024.6.7b7"
 authors = [
   { name="Chris Abberley", email="unlisted@gmail.com" },
 ]
