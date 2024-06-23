@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from math import sqrt
+import uuid
 import asyncio
 import logging
 from aiohttp import ClientResponse, ClientSession
@@ -40,7 +41,12 @@ from .exceptions import (
 )
 
 LOGGER = logging.getLogger(__name__)
-
+LOGGER.setLevel(logging.DEBUG)
+FH = logging.FileHandler('redbacktechpy.log')
+FH.setLevel(logging.DEBUG)
+FORMATTER = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+FH.setFormatter(FORMATTER)
+LOGGER.addHandler(FH)
 class RedbackTechClient:
     """Redback Tech Client"""
 
@@ -93,8 +99,6 @@ class RedbackTechClient:
             await self._create_op_env_data()
 
         op_envelope_data: dict[str, OpEnvelopes] = {}
-        #inverter_data: dict[str, Inverters] = {}
-        #battery_data: dict[str, Batterys] = {}
         text_data: dict[str, Text] = {}
         entity_data: dict[str, RedbackEntitys] = {}
         device_info_data: dict[str, DeviceInfo] = {}
@@ -342,9 +346,10 @@ class RedbackTechClient:
         }
         LOGGER.debug('Setting inverter mode data: %s ', data)
         full_url = f'{BaseUrl.PORTAL}{Endpoint.PORTAL_INVERTER_SET}'
-        await self._portal_post(full_url, headers, data)
+        result = await self._portal_post(full_url, headers, data)
+        LOGGER.debug('Setting inverter mode result: %s ', result)
         await self._session2.close()
-        return
+        return result
 
     async def update_inverter_control_values(self, device_id, data_key, data_value):
         """Update inverter control values."""
