@@ -42,11 +42,7 @@ from .exceptions import (
 
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.DEBUG)
-FH = logging.FileHandler('redbacktechpy.log')
-FH.setLevel(logging.DEBUG)
-FORMATTER = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-FH.setFormatter(FORMATTER)
-LOGGER.addHandler(FH)
+
 class RedbackTechClient:
     """Redback Tech Client"""
 
@@ -336,12 +332,12 @@ class RedbackTechClient:
         data = {
             'SerialNumber':serial_number,
             'AppliedTariffId':'',
-            'InverterOperation[Type]':'Set' #InverterOperationType.SET,
+            'InverterOperation[Type]':'Set', #InverterOperationType.SET,
             'InverterOperation[Mode]':mode,
             'InverterOperation[PowerInWatts]':power,
             'InverterOperation[AppliedTarrifId]':'',
             'ProductModelName': '',
-            'RossVersion':'Redback.Utils.RossVersion' #ross_version,
+            'RossVersion':'Redback.Utils.RossVersion', #ross_version,
             '__RequestVerificationToken':self._GAFToken     
         }
         LOGGER.debug('Setting inverter mode data: %s ', data)
@@ -850,6 +846,7 @@ class RedbackTechClient:
     @staticmethod
     async def _portal_response(resp: ClientResponse):
         """Return response from Portal call."""
+        LOGGER.debug('Portal Response: %s', resp)
         if resp.status != 200:
             error = await resp.text()
             raise RedbackTechClientError(f'RedbackTech API Error Encountered. Status: {resp.status}; Error: {error}')
