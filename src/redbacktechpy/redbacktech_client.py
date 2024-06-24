@@ -41,12 +41,11 @@ from .exceptions import (
 )
 
 LOGGER = logging.getLogger(__name__)
-LOGGER.setLevel(logging.DEBUG)
 
 class RedbackTechClient:
     """Redback Tech Client"""
 
-    def __init__(self, client_id: str, client_secret:str, portal_email: str, portal_password: str, session1: ClientSession | None = None, session2: ClientSession | None = None, timeout: int = TIMEOUT, include_envelopes=True) -> None:
+    def __init__(self, client_id: str, client_secret:str, portal_email: str, portal_password: str, session1: ClientSession | None = None, session2: ClientSession | None = None, timeout: int = TIMEOUT, include_envelopes=True, debug_logging = False) -> None:
         self.client_id: str = client_id
         self.client_secret: str = client_secret
         self.portal_email: str = portal_email
@@ -86,6 +85,8 @@ class RedbackTechClient:
         self._redback_op_env_create_settings = {}
         self._redback_op_env_selected = {}
         
+        if debug_logging:
+            LOGGER.setLevel(logging.DEBUG)
 
     async def get_redback_data(self):
         """Get Redback Data."""
@@ -332,20 +333,19 @@ class RedbackTechClient:
         data = {
             'SerialNumber':serial_number,
             'AppliedTariffId':'',
-            'InverterOperation[Type]':'Set', #InverterOperationType.SET,
+            'InverterOperation[Type]':InverterOperationType.SET,
             'InverterOperation[Mode]':mode,
             'InverterOperation[PowerInWatts]':power,
             'InverterOperation[AppliedTarrifId]':'',
             'ProductModelName': '',
-            'RossVersion':'Redback.Utils.RossVersion', #ross_version,
+            'RossVersion':ross_version,
             '__RequestVerificationToken':self._GAFToken     
         }
         LOGGER.debug('Setting inverter mode data: %s ', data)
         full_url = f'{BaseUrl.PORTAL}{Endpoint.PORTAL_INVERTER_SET}'
-        result = await self._portal_post(full_url, headers, data)
-        LOGGER.debug('Setting inverter mode result: %s ', result)
+        await self._portal_post(full_url, headers, data)
         await self._session2.close()
-        return result
+        return
 
     async def update_inverter_control_values(self, device_id, data_key, data_value):
         """Update inverter control values."""
@@ -826,7 +826,7 @@ class RedbackTechClient:
             form = soup.find('form', id='GlobalAntiForgeryToken')
         hidden_input = form.find("input", type="hidden")
         self._GAFToken = hidden_input.attrs['value']
-        return     
+        return
 
     async def _portal_post(self, url: str, headers: dict[str, Any], data ) -> dict[str, Any]:
         """Make POST Portal call."""
