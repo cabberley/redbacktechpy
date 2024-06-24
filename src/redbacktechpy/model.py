@@ -1,17 +1,19 @@
-""" Data classes for Redback Tech API """
+"""Data classes for Redback Tech API"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 import datetime
 from typing import Any, Optional
 
+
 @dataclass
 class RedbackTechData:
     """Dataclass for all RedbackTech Data."""
 
     user_id: str
-    inverters: Optional[dict[int, Any]] = None
-    batterys: Optional[dict[int, Any]] = None
+    openvelopes: Optional[dict[int, Any]] = None
+    text: Optional[dict[int, Any]] = None
     entities: Optional[dict[int, Any]] = None
     devices: Optional[dict[int, Any]] = None
     numbers: Optional[dict[int, Any]] = None
@@ -19,7 +21,7 @@ class RedbackTechData:
     schedules: Optional[dict[int, Any]] = None
     selects: Optional[dict[int, Any]] = None
     schedules_datetime_data: Optional[dict[int, Any]] = None
-    
+
 
 @dataclass
 class Site:
@@ -29,6 +31,7 @@ class Site:
     data: dict[str, Any]
     type: str
 
+
 @dataclass
 class RedbackEntitys:
     entity_id: str
@@ -36,6 +39,8 @@ class RedbackEntitys:
     data: dict[str, Any]
     type: Optional[str] = None
     device_data: Optional[dict[str, Any]] = None
+
+
 @dataclass
 class Inverters:
     """Dataclass for Redback Inverters."""
@@ -45,7 +50,17 @@ class Inverters:
     data: dict[str, Any]
     type: str
 
-@dataclass    
+
+@dataclass
+class OpEnvelopes:
+    """Dataclass for Redback Inverters."""
+
+    id: str
+    site_id: str
+    data: dict[str, Any]
+
+
+@dataclass
 class Batterys:
     """Dataclass for RedBack Batteries."""
 
@@ -53,6 +68,7 @@ class Batterys:
     device_serial_number: str
     data: dict[str, Any]
     type: str
+
 
 @dataclass
 class DeviceInfo:
@@ -65,6 +81,7 @@ class DeviceInfo:
     hw_version: str
     serial_number: str
 
+
 @dataclass
 class Numbers:
     """Dataclass for Redback Inverters."""
@@ -74,6 +91,17 @@ class Numbers:
     data: dict[str, Any]
     type: str
 
+
+@dataclass
+class ActiveSchedule:
+    """Dataclass for Redback Inverters."""
+
+    id: str
+    device_serial_number: str
+    data: dict[str, Any]
+    type: str
+
+
 @dataclass
 class Buttons:
     """Dataclass for Redback Inverters."""
@@ -82,7 +110,17 @@ class Buttons:
     device_serial_number: str
     data: dict[str, Any]
     type: str
-    
+
+
+@dataclass
+class Text:
+    """Dataclass for Redback Inverters."""
+
+    id: str
+    site_id: str
+    data: dict[str, Any]
+
+
 @dataclass
 class Selects:
     """Dataclass for Redback Inverters."""
@@ -92,13 +130,16 @@ class Selects:
     data: dict[str, Any]
     type: str
 
+
 @dataclass
 class ScheduleDateTime:
     """Dataclass for Redback Inverters."""
+
     id: str
     device_serial_number: str
     data: dict[str, Any]
     type: str
+
 
 @dataclass
 class ScheduleInfo:
