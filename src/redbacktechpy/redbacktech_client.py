@@ -18,13 +18,13 @@ from .constants import (
     AUTH_ERROR_CODES,
     DEVICEINFOREFRESH,
     INVERTER_MODES,
+    INVERTER_PORTAL_MODES,
     OAUTH_GRANT_TYPE,
     OAUTH_SCOPE,
 )
 
 from .model import (
     OpEnvelopes,
-    Batterys,
     RedbackTechData,
     RedbackEntitys,
     DeviceInfo,
@@ -315,7 +315,7 @@ class RedbackTechClient:
             mode = 'Auto'
             power = 0
         else:
-            if mode not in INVERTER_MODES:
+            if mode not in INVERTER_PORTAL_MODES:
                 mode = 'Auto'
                 power = 0
             if power < 0 or power > 10000:
