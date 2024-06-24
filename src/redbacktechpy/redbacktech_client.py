@@ -336,12 +336,12 @@ class RedbackTechClient:
         data = {
             'SerialNumber':serial_number,
             'AppliedTariffId':'',
-            'InverterOperation[Type]':InverterOperationType.SET,
+            'InverterOperation[Type]':'Set' #InverterOperationType.SET,
             'InverterOperation[Mode]':mode,
             'InverterOperation[PowerInWatts]':power,
             'InverterOperation[AppliedTarrifId]':'',
             'ProductModelName': '',
-            'RossVersion':ross_version,
+            'RossVersion':'Redback.Utils.RossVersion' #ross_version,
             '__RequestVerificationToken':self._GAFToken     
         }
         LOGGER.debug('Setting inverter mode data: %s ', data)
