@@ -33,7 +33,6 @@ from .model import (
     Numbers,
     ScheduleInfo,
     ScheduleDateTime,
-    CalendarEvent,
     Text,
 )
 from .exceptions import (
@@ -744,7 +743,7 @@ class RedbackTechClient:
             schedule_id=data['id'],
             data=schedule,
             device_serial_number = schedule['device_id'],
-            start_time =  schedule['start_time_utc'] 
+            start_time =  schedule['start_time_utc']
         )
         return schedule_instance, data['id']
 
@@ -783,17 +782,17 @@ class RedbackTechClient:
             mode = 'Force Discharge Battery'
         description_text = (
             "Inverter Serial Number: " + entity['serial_number']
-            + "Starting at " + entity["start_time_utc"].strftime("%Y-%m-%d %H:%M:%S")
-            + " and ending at " + (entity["end_time"]).strftime("%Y-%m-%d %H:%M:%S")
-            + " the inverter will be in " + mode + " mode")
+            + " during this time the inverter will be in " + mode + " mode with a Power Level set at:"
+            + str(entity["power_w"]) + " Watts"
+            )
         
         data = {
             'uuid' : entity['schedule_id'],
             'start': entity['start_time_utc'],
             'end': entity['end_time'],
-            'summary': entity['schedule_selector'],
+            'summary': entity['serial_number'] + ' ' + mode,
             'description': description_text,
-            'device_id:' : entity['device_id'],
+            'device_id' : entity['device_id'],
         }
         return data
 
@@ -802,10 +801,8 @@ class RedbackTechClient:
 
         description_text = (
             "Site: " + entity['data']['SiteId'] 
-            + " Scheduled Envelope. Starting at "
-            + entity['data']["StartAtUtc"].strftime("%Y-%m-%d %H:%M:%S")
-            + " and ending at " + (entity['data']["EndAtUtc"]).strftime("%Y-%m-%d %H:%M:%S")
-            + " the site has the following Envelope Defined: Max Import Power: "
+            + " Scheduled Operation Envelope."
+            + " the site has the following Envelope defined during this time period: Max Import Power: "
             + str(entity['data']["MaxImportPowerW"])
             + "Watts, Max Export Power: " + str(entity['data']["MaxExportPowerW"])
             + "Watts, Max Discharge Power: " + str(entity['data']["MaxDischargePowerW"])
@@ -813,14 +810,13 @@ class RedbackTechClient:
             + ", Max Generation Power: " + str(entity['data']["MaxGenerationPowerVA"]) + "VA"
             )
         device_id = (entity['data']['SiteId'][-4:] + 'env').lower()
-        #device_id = device_id.lower()
         data = {
             'uuid' : entity['openv_id'],
             'start': entity['data']['StartAtUtc'],
             'end': entity['data']['EndAtUtc'],
-            'summary': entity['openv_id'],
+            'summary': entity['data']['SiteId'] + ' Envelope Scheduled',
             'description': description_text,
-            'device_id:' : device_id,
+            'device_id' : device_id,
         }
         return data
 

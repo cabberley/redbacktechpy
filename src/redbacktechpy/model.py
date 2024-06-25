@@ -153,13 +153,3 @@ class ScheduleInfo:
     data: dict[str, Any]
 
 
-@dataclass
-class CalendarEvent:
-    """Dataclass for Calendar Event."""
-
-    uuid: str
-    start: datetime.datetime
-    end: datetime.datetime
-    summary: str
-    description: str
-    location: str
