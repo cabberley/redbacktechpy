@@ -781,35 +781,46 @@ class RedbackTechClient:
             mode = 'Force Charge Battery'
         elif entity["inverter_mode"] == "ForceDischargeBattery":
             mode = 'Force Discharge Battery'
-        description_text = "Starting at " + entity["start_time_utc"].strftime("%Y-%m-%d %H:%M:%S") + " and ending at " + (entity["end_time"]).strftime("%Y-%m-%d %H:%M:%S") + " the inverter will be in " + mode + " mode"
+        description_text = (
+            "Inverter Serial Number: " + entity['serial_number']
+            + "Starting at " + entity["start_time_utc"].strftime("%Y-%m-%d %H:%M:%S")
+            + " and ending at " + (entity["end_time"]).strftime("%Y-%m-%d %H:%M:%S")
+            + " the inverter will be in " + mode + " mode")
         
         data = {
             'uuid' : entity['schedule_id'],
             'start': entity['start_time_utc'],
             'end': entity['end_time'],
             'summary': entity['schedule_selector'],
-            
             'description': description_text,
+            'device_id:' : entity['device_id'],
         }
         return data
-    
+
     async def _handle_envelope_calendar(self, entity: dict[str, Any]) -> dict[str, Any]:
         """Handle schedule data."""
 
-        description_text = ("Starting at " + entity['data']["StartAtUtc"].strftime("%Y-%m-%d %H:%M:%S") 
-            + " and ending at " + (entity['data']["EndAtUtc"]).strftime("%Y-%m-%d %H:%M:%S") 
-            + " the site has the following Envelope Defined: Max Import Power: " + str(entity['data']["MaxImportPowerW"])
-            + "Watts, Max Export Power: " + str(entity['data']["MaxExportPowerW"]) + "Watts, Max Discharge Power: " + str(entity['data']["MaxDischargePowerW"])
-            + "Watts, Max Charge Power: " + str(entity['data']["MaxChargePowerW"]) + ", Max Generation Power: " + str(entity['data']["MaxGenerationPowerVA"]) + "VA"
+        description_text = (
+            "Site: " + entity['data']['SiteId'] 
+            + " Scheduled Envelope. Starting at "
+            + entity['data']["StartAtUtc"].strftime("%Y-%m-%d %H:%M:%S")
+            + " and ending at " + (entity['data']["EndAtUtc"]).strftime("%Y-%m-%d %H:%M:%S")
+            + " the site has the following Envelope Defined: Max Import Power: "
+            + str(entity['data']["MaxImportPowerW"])
+            + "Watts, Max Export Power: " + str(entity['data']["MaxExportPowerW"])
+            + "Watts, Max Discharge Power: " + str(entity['data']["MaxDischargePowerW"])
+            + "Watts, Max Charge Power: " + str(entity['data']["MaxChargePowerW"])
+            + ", Max Generation Power: " + str(entity['data']["MaxGenerationPowerVA"]) + "VA"
             )
-        
+        device_id = (entity['data']['SiteId'][-4:] + 'env').lower()
+        #device_id = device_id.lower()
         data = {
             'uuid' : entity['openv_id'],
             'start': entity['data']['StartAtUtc'],
             'end': entity['data']['EndAtUtc'],
             'summary': entity['openv_id'],
-            
             'description': description_text,
+            'device_id:' : device_id,
         }
         return data
 
