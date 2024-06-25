@@ -33,6 +33,7 @@ from .model import (
     Numbers,
     ScheduleInfo,
     ScheduleDateTime,
+    CalendarEvent,
     Text,
 )
 from .exceptions import (
@@ -106,9 +107,12 @@ class RedbackTechClient:
         schedules_datetime_data: dict[str, ScheduleDateTime] = {}
 
         if self._redback_open_env_data is not None:
+            envelope_calendar_list = []
+            self._redback_open_env_data.sort(key = lambda x: x['data']['StartAtUtc'])
             for op_env in self._redback_open_env_data:
                 op_instance, op_id = await self._handle_op_env(op_env)
                 op_envelope_data[op_id] = op_instance
+                envelope_calendar_list.append(await self._handle_envelope_calendar(op_env))
 
         if self._redback_entities is not None:
             for entity in self._redback_entities:
@@ -141,11 +145,14 @@ class RedbackTechClient:
                 selects_data[select_id] = select_instance
 
         if self._redback_schedules is not None:
+            inverter_calendar_list = []
+            self._redback_schedules.sort(key = lambda x: x['start_time_utc'])
             for schedule in self._redback_schedules:
                 schedule_instance, schedule_id = await self._handle_schedule(schedule)
                 schedules_data[schedule_id] = schedule_instance
+                inverter_calendar_list.append(await self._handle_inverter_calendar(schedule))
 
-        if self._redback_schedule_datetime is not None:   
+        if self._redback_schedule_datetime is not None:
             for schedule in self._redback_schedule_datetime:
                 schedule_instance, schedule_id = await self._handle_schedule_datetime(schedule)
                 schedules_datetime_data[schedule_id] = schedule_instance
@@ -160,7 +167,9 @@ class RedbackTechClient:
             numbers= numbers_data,
             selects= selects_data,
             schedules= schedules_data,
-            schedules_datetime_data = schedules_datetime_data
+            schedules_datetime_data = schedules_datetime_data,
+            inverter_calendar = inverter_calendar_list,
+            envelope_calendar = envelope_calendar_list
         )
 
     async def _api_login(self) -> None:
@@ -751,6 +760,58 @@ class RedbackTechClient:
             type=entity['device_type']
         )
         return schedule_instance, data['id']
+    
+    async def _handle_inverter_calendar(self, entity: dict[str, Any]) -> dict[str, Any]:
+        """Handle schedule data."""
+        if entity["inverter_mode"] == "Auto":
+            mode = 'Auto'
+        elif entity["inverter_mode"] == 'ChargeBattery':
+            mode = 'Charge Battery'
+        elif entity["inverter_mode"] == 'DischargeBattery':
+            mode = 'Discharge Battery'
+        elif entity["inverter_mode"] == 'ExportPower':
+            mode = 'Export Power'
+        elif entity["inverter_mode"] == 'ImportPower':
+            mode = 'Import Power'
+        elif entity["inverter_mode"] == "BuyPower":
+            mode = 'Buy Power'
+        elif entity["inverter_mode"] == "SellPower":
+            mode = 'Sell Power'
+        elif entity["inverter_mode"] == "ForceChargeBattery":
+            mode = 'Force Charge Battery'
+        elif entity["inverter_mode"] == "ForceDischargeBattery":
+            mode = 'Force Discharge Battery'
+        description_text = "Starting at " + entity["start_time_utc"].strftime("%Y-%m-%d %H:%M:%S") + " and ending at " + (entity["end_time"]).strftime("%Y-%m-%d %H:%M:%S") + " the inverter will be in " + mode + " mode"
+        
+        data = {
+            'uuid' : entity['schedule_id'],
+            'start': entity['start_time_utc'],
+            'end': entity['end_time'],
+            'summary': entity['schedule_selector'],
+            
+            'description': description_text,
+        }
+        return data
+    
+    async def _handle_envelope_calendar(self, entity: dict[str, Any]) -> dict[str, Any]:
+        """Handle schedule data."""
+
+        description_text = ("Starting at " + entity['data']["StartAtUtc"].strftime("%Y-%m-%d %H:%M:%S") 
+            + " and ending at " + (entity['data']["EndAtUtc"]).strftime("%Y-%m-%d %H:%M:%S") 
+            + " the site has the following Envelope Defined: Max Import Power: " + str(entity['data']["MaxImportPowerW"])
+            + "Watts, Max Export Power: " + str(entity['data']["MaxExportPowerW"]) + "Watts, Max Discharge Power: " + str(entity['data']["MaxDischargePowerW"])
+            + "Watts, Max Charge Power: " + str(entity['data']["MaxChargePowerW"]) + ", Max Generation Power: " + str(entity['data']["MaxGenerationPowerVA"]) + "VA"
+            )
+        
+        data = {
+            'uuid' : entity['openv_id'],
+            'start': entity['data']['StartAtUtc'],
+            'end': entity['data']['EndAtUtc'],
+            'summary': entity['openv_id'],
+            
+            'description': description_text,
+        }
+        return data
 
     async def _api_post(self, url: str, headers: dict[str, Any], data ) -> dict[str, Any]:
         """Make POST API call."""
