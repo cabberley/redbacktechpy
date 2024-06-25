@@ -793,6 +793,9 @@ class RedbackTechClient:
             'summary': entity['serial_number'] + ' ' + mode,
             'description': description_text,
             'device_id' : entity['device_id'],
+            'device_type' : "env",
+            'power_level' : str(entity["power_w"]) + " Watts",
+            'power_mode' : mode
         }
         return data
 
@@ -817,6 +820,12 @@ class RedbackTechClient:
             'summary': entity['data']['SiteId'] + ' Envelope Scheduled',
             'description': description_text,
             'device_id' : device_id,
+            'device_type' : "env",
+            "max_import_power" : str(entity['data']["MaxImportPowerW"]) + " Watts",
+            "max_export_power": str(entity['data']["MaxExportPowerW"]) + " Watts",
+            "max_discharge_power": str(entity['data']["MaxDischargePowerW"]) + " Watts",
+            "max_charge_power": str(entity['data']["MaxChargePowerW"]) + " Watts",
+            "max_generation_power": str(entity['data']["MaxGenerationPowerVA"]) + " VA",
         }
         return data
 
