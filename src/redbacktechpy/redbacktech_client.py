@@ -815,7 +815,7 @@ class RedbackTechClient:
             )
         device_id = (entity['data']['SiteId'][-4:] + 'env').lower()
         data = {
-            'schedule_selector' : entity['schedule_selector'],
+            'schedule_selector' : entity['data']['schedule_selector'],
             'uuid' : entity['openv_id'],
             'start': entity['data']['StartAtUtc'],
             'end': entity['data']['EndAtUtc'],
