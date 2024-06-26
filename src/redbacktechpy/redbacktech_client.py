@@ -793,8 +793,8 @@ class RedbackTechClient:
             'summary': entity['serial_number'] + ' ' + mode,
             'description': description_text,
             'device_id' : entity['device_id'],
-            'device_type' : "env",
-            'power_level' : str(entity["power_w"]) + " Watts",
+            'device_type' : "inv",
+            'power_level' : entity["power_w"],
             'power_mode' : mode
         }
         return data
@@ -821,11 +821,11 @@ class RedbackTechClient:
             'description': description_text,
             'device_id' : device_id,
             'device_type' : "env",
-            "max_import_power" : str(entity['data']["MaxImportPowerW"]) + " Watts",
-            "max_export_power": str(entity['data']["MaxExportPowerW"]) + " Watts",
-            "max_discharge_power": str(entity['data']["MaxDischargePowerW"]) + " Watts",
-            "max_charge_power": str(entity['data']["MaxChargePowerW"]) + " Watts",
-            "max_generation_power": str(entity['data']["MaxGenerationPowerVA"]) + " VA",
+            "max_import_power" : entity['data']["MaxImportPowerW"],
+            "max_export_power": entity['data']["MaxExportPowerW"],
+            "max_discharge_power": entity['data']["MaxDischargePowerW"],
+            "max_charge_power": entity['data']["MaxChargePowerW"],
+            "max_generation_power": entity['data']["MaxGenerationPowerVA"],
         }
         return data
 
