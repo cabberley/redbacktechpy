@@ -787,6 +787,7 @@ class RedbackTechClient:
             )
         
         data = {
+            'schedule_selector' : entity['schedule_selector'],
             'uuid' : entity['schedule_id'],
             'start': entity['start_time_utc'],
             'end': entity['end_time'],
@@ -814,6 +815,7 @@ class RedbackTechClient:
             )
         device_id = (entity['data']['SiteId'][-4:] + 'env').lower()
         data = {
+            'schedule_selector' : entity['schedule_selector'],
             'uuid' : entity['openv_id'],
             'start': entity['data']['StartAtUtc'],
             'end': entity['data']['EndAtUtc'],
