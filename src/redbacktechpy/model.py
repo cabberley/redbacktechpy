@@ -21,6 +21,8 @@ class RedbackTechData:
     schedules: Optional[dict[int, Any]] = None
     selects: Optional[dict[int, Any]] = None
     schedules_datetime_data: Optional[dict[int, Any]] = None
+    inverter_calendar: Optional[dict[int, Any]] = None
+    envelope_calendar: Optional[dict[int, Any]] = None
 
 
 @dataclass
@@ -149,3 +151,5 @@ class ScheduleInfo:
     device_serial_number: str
     start_time: datetime.datetime
     data: dict[str, Any]
+
+

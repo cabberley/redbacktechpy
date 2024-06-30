@@ -2,6 +2,7 @@
 from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any
+import re
 from math import sqrt
 import uuid
 import asyncio
@@ -62,6 +63,7 @@ class RedbackTechClient:
         self._device_info_refresh_time: datetime | None = None
         self._redback_site_ids = []
         self._redback_devices = []
+        self._redback_mppt_data = {}
         self._redback_entities = []
         self._redback_device_info = []
         self._redback_buttons = []
@@ -106,9 +108,12 @@ class RedbackTechClient:
         schedules_datetime_data: dict[str, ScheduleDateTime] = {}
 
         if self._redback_open_env_data is not None:
+            envelope_calendar_list = []
+            self._redback_open_env_data.sort(key = lambda x: x['data']['StartAtUtc'])
             for op_env in self._redback_open_env_data:
                 op_instance, op_id = await self._handle_op_env(op_env)
                 op_envelope_data[op_id] = op_instance
+                envelope_calendar_list.append(await self._handle_envelope_calendar(op_env))
 
         if self._redback_entities is not None:
             for entity in self._redback_entities:
@@ -141,11 +146,14 @@ class RedbackTechClient:
                 selects_data[select_id] = select_instance
 
         if self._redback_schedules is not None:
+            inverter_calendar_list = []
+            self._redback_schedules.sort(key = lambda x: x['start_time_utc'])
             for schedule in self._redback_schedules:
                 schedule_instance, schedule_id = await self._handle_schedule(schedule)
                 schedules_data[schedule_id] = schedule_instance
+                inverter_calendar_list.append(await self._handle_inverter_calendar(schedule))
 
-        if self._redback_schedule_datetime is not None:   
+        if self._redback_schedule_datetime is not None:
             for schedule in self._redback_schedule_datetime:
                 schedule_instance, schedule_id = await self._handle_schedule_datetime(schedule)
                 schedules_datetime_data[schedule_id] = schedule_instance
@@ -160,7 +168,9 @@ class RedbackTechClient:
             numbers= numbers_data,
             selects= selects_data,
             schedules= schedules_data,
-            schedules_datetime_data = schedules_datetime_data
+            schedules_datetime_data = schedules_datetime_data,
+            inverter_calendar = inverter_calendar_list,
+            envelope_calendar = envelope_calendar_list
         )
 
     async def _api_login(self) -> None:
@@ -301,6 +311,46 @@ class RedbackTechClient:
         }
         await self._check_token()
         await self._api_post_json(f'{BaseUrl.API}{Endpoint.API_SCHEDULE_CREATE_BY_SERIALNUMBER}', headers, post_data)
+        return
+
+    async def _get_inverter_mppt_data(self, serial_numbers: str) -> dict[str, Any]:
+        """Get inverter MPPT data."""
+        await self._portal_login()
+        for serial_number in serial_numbers:
+            pv_number_panels =[]
+            pv_panel_direction =[]
+            full_url = f"{BaseUrl.PORTAL}{Endpoint.PORTAL_INSTALLATION_DETAILS}{serial_number}"
+            response = await self._portal_get(full_url, {}, {})
+            soup = BeautifulSoup(response , features="html.parser")
+            form = soup.find("form", id="form")
+            pv_size = form.find_all("input",id = re.compile("SolarPanels_[0-9]__PVSize"))
+            divs_name = form.find_all("div", {"class" : "form-group rb-selectbox"}) 
+            for div in divs_name:
+                select = div.find("select")
+                if re.compile("SolarPanels_[0-9]__NumberOfPanels").match(select['id']):
+                    option = select.find_all("option")
+                    for opt in option:
+                        if opt.get('selected') == 'selected':
+                            pv_number_panels.append(opt.get('value'))
+                            break
+                if re.compile("SolarPanels_[0-9]__PanelDirection").match(select['id']):
+                    option = select.find_all("option")
+                    for opt in option:
+                        if opt.get('selected') == 'selected':
+                            pv_panel_direction.append(opt.get('value'))
+                            break
+            x=0
+            mppt_strings= {}
+            while x < len(pv_size):
+                data = {}
+                data["pv_size"] = pv_size[x].attrs["value"]
+                if len(pv_number_panels) >x:
+                    data["pv_number_panels"] = pv_number_panels[x]
+                if len(pv_panel_direction) >x:
+                    data["pv_panel_direction"] = pv_panel_direction[x]
+                x=x+1
+                mppt_strings['mppt_'+str(x)] = data
+            self._redback_mppt_data[serial_number] = mppt_strings
         return
 
     async def set_inverter_mode_portal(self, device_id: str, mode='Auto', power = 0, mode_override=False):
@@ -601,6 +651,7 @@ class RedbackTechClient:
         """Create device info."""
         if await self._check_device_info_refresh():
             self._serial_numbers = await self._get_inverter_list()
+            await self._get_inverter_mppt_data(self._serial_numbers)
             self._device_info_refresh_time = datetime.now() + timedelta(seconds=DEVICEINFOREFRESH)
         self._redback_device_info = []
         self._redback_entities = []
@@ -735,7 +786,7 @@ class RedbackTechClient:
             schedule_id=data['id'],
             data=schedule,
             device_serial_number = schedule['device_id'],
-            start_time =  schedule['start_time_utc'] 
+            start_time =  schedule['start_time_utc']
         )
         return schedule_instance, data['id']
 
@@ -751,6 +802,77 @@ class RedbackTechClient:
             type=entity['device_type']
         )
         return schedule_instance, data['id']
+    
+    async def _handle_inverter_calendar(self, entity: dict[str, Any]) -> dict[str, Any]:
+        """Handle schedule data."""
+        if entity["inverter_mode"] == "Auto":
+            mode = 'Auto'
+        elif entity["inverter_mode"] == 'ChargeBattery':
+            mode = 'Charge Battery'
+        elif entity["inverter_mode"] == 'DischargeBattery':
+            mode = 'Discharge Battery'
+        elif entity["inverter_mode"] == 'ExportPower':
+            mode = 'Export Power'
+        elif entity["inverter_mode"] == 'ImportPower':
+            mode = 'Import Power'
+        elif entity["inverter_mode"] == "BuyPower":
+            mode = 'Buy Power'
+        elif entity["inverter_mode"] == "SellPower":
+            mode = 'Sell Power'
+        elif entity["inverter_mode"] == "ForceChargeBattery":
+            mode = 'Force Charge Battery'
+        elif entity["inverter_mode"] == "ForceDischargeBattery":
+            mode = 'Force Discharge Battery'
+        description_text = (
+            "Inverter Serial Number: " + entity['serial_number']
+            + " during this time the inverter will be in " + mode + " mode with a Power Level set at:"
+            + str(entity["power_w"]) + " Watts"
+            )
+        
+        data = {
+            'schedule_selector' : entity['schedule_selector'],
+            'uuid' : entity['schedule_id'],
+            'start': entity['start_time_utc'],
+            'end': entity['end_time'],
+            'summary': entity['serial_number'] + ' ' + mode,
+            'description': description_text,
+            'device_id' : entity['device_id'],
+            'device_type' : "inv",
+            'power_level' : entity["power_w"],
+            'power_mode' : mode
+        }
+        return data
+
+    async def _handle_envelope_calendar(self, entity: dict[str, Any]) -> dict[str, Any]:
+        """Handle schedule data."""
+
+        description_text = (
+            "Site: " + entity['data']['SiteId'] 
+            + " Scheduled Operation Envelope."
+            + " the site has the following Envelope defined during this time period: Max Import Power: "
+            + str(entity['data']["MaxImportPowerW"])
+            + "Watts, Max Export Power: " + str(entity['data']["MaxExportPowerW"])
+            + "Watts, Max Discharge Power: " + str(entity['data']["MaxDischargePowerW"])
+            + "Watts, Max Charge Power: " + str(entity['data']["MaxChargePowerW"])
+            + ", Max Generation Power: " + str(entity['data']["MaxGenerationPowerVA"]) + "VA"
+            )
+        device_id = (entity['data']['SiteId'][-4:] + 'env').lower()
+        data = {
+            'schedule_selector' : entity['data']['schedule_selector'],
+            'uuid' : entity['openv_id'],
+            'start': entity['data']['StartAtUtc'],
+            'end': entity['data']['EndAtUtc'],
+            'summary': entity['data']['SiteId'] + ' Envelope Scheduled',
+            'description': description_text,
+            'device_id' : device_id,
+            'device_type' : "env",
+            "max_import_power" : entity['data']["MaxImportPowerW"],
+            "max_export_power": entity['data']["MaxExportPowerW"],
+            "max_discharge_power": entity['data']["MaxDischargePowerW"],
+            "max_charge_power": entity['data']["MaxChargePowerW"],
+            "max_generation_power": entity['data']["MaxGenerationPowerVA"],
+        }
+        return data
 
     async def _api_post(self, url: str, headers: dict[str, Any], data ) -> dict[str, Any]:
         """Make POST API call."""
@@ -1154,6 +1276,25 @@ class RedbackTechClient:
             entity_name_temp = f'mppt_{pvId}_power_kw'
             data_dict = {'value': pv['PowerkW'],'entity_name': entity_name_temp, 'device_id': id_temp, 'device_type': 'inverter'}
             self._redback_entities.append(data_dict)
+            if data['Data']['Nodes'][0]['StaticData']['Id'] in self._redback_mppt_data:
+                if ("mppt_"+str(pvId)) in self._redback_mppt_data[data['Data']['Nodes'][0]['StaticData']['Id']]:
+                    if "pv_size" in self._redback_mppt_data[data['Data']['Nodes'][0]['StaticData']['Id']]["mppt_"+str(pvId)]:
+                        entity_name_temp = f'mppt_{pvId}_size_kw'
+                        data_dict = {'value': round(float(self._redback_mppt_data[data['Data']['Nodes'][0]['StaticData']['Id']]["mppt_"+str(pvId)]["pv_size"]),3) ,'entity_name': entity_name_temp, 'device_id': id_temp, 'device_type': 'inverter'}
+                        self._redback_entities.append(data_dict)
+                        entity_name_temp = f'mppt_{pvId}_generation_instant'
+                        temp_data =round(( pv['PowerkW'] /float(self._redback_mppt_data[data['Data']['Nodes'][0]['StaticData']['Id']]["mppt_"+str(pvId)]["pv_size"])) * 100,2)
+                        data_dict = {'value': temp_data ,'entity_name': entity_name_temp, 'device_id': id_temp, 'device_type': 'inverter'}
+                        self._redback_entities.append(data_dict)
+                    if "pv_number_panels" in self._redback_mppt_data[data['Data']['Nodes'][0]['StaticData']['Id']]["mppt_"+str(pvId)]:
+                        entity_name_temp = f'mppt_{pvId}_number_panels'
+                        data_dict = {'value': self._redback_mppt_data[data['Data']['Nodes'][0]['StaticData']['Id']]["mppt_"+str(pvId)]["pv_number_panels"] ,'entity_name': entity_name_temp, 'device_id': id_temp, 'device_type': 'inverter'}
+                        self._redback_entities.append(data_dict)
+                    if "pv_panel_direction" in self._redback_mppt_data[data['Data']['Nodes'][0]['StaticData']['Id']]["mppt_"+str(pvId)]:
+                        entity_name_temp = f'mppt_{pvId}_panel_direction'
+                        data_dict = {'value': self._redback_mppt_data[data['Data']['Nodes'][0]['StaticData']['Id']]["mppt_"+str(pvId)]["pv_panel_direction"] ,'entity_name': entity_name_temp, 'device_id': id_temp, 'device_type': 'inverter'}
+                        self._redback_entities.append(data_dict)
+                    
             pvId += 1
         phase_count = 0
         phase_voltage_sum = 0
