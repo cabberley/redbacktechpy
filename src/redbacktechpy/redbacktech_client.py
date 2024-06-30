@@ -313,28 +313,41 @@ class RedbackTechClient:
         await self._api_post_json(f'{BaseUrl.API}{Endpoint.API_SCHEDULE_CREATE_BY_SERIALNUMBER}', headers, post_data)
         return
 
-    async def get_inverter_mppt_data(self, serial_numbers: str) -> dict[str, Any]:
+    async def _get_inverter_mppt_data(self, serial_numbers: str) -> dict[str, Any]:
         """Get inverter MPPT data."""
         await self._portal_login()
         for serial_number in serial_numbers:
+            pv_number_panels =[]
+            pv_panel_direction =[]
             full_url = f"{BaseUrl.PORTAL}{Endpoint.PORTAL_INSTALLATION_DETAILS}{serial_number}"
             response = await self._portal_get(full_url, {}, {})
             soup = BeautifulSoup(response , features="html.parser")
             form = soup.find("form", id="form")
             pv_size = form.find_all("input",id = re.compile("SolarPanels_[0-9]__PVSize"))
-            pv_number_panels = form.find_all("select",id = re.compile("SolarPanels_[0-9]__NumberOfPanels"))
-            ttt=pv_number_panels[0]
-            #ttt.option.value
-            pv_panel_direction = form.find_all("select",id = re.compile("SolarPanels_[0-9]__PanelDirection"))
+            divs_name = form.find_all("div", {"class" : "form-group rb-selectbox"}) 
+            for div in divs_name:
+                select = div.find("select")
+                if re.compile("SolarPanels_[0-9]__NumberOfPanels").match(select['id']):
+                    option = select.find_all("option")
+                    for opt in option:
+                        if opt.get('selected') == 'selected':
+                            pv_number_panels.append(opt.get('value'))
+                            break
+                if re.compile("SolarPanels_[0-9]__PanelDirection").match(select['id']):
+                    option = select.find_all("option")
+                    for opt in option:
+                        if opt.get('selected') == 'selected':
+                            pv_panel_direction.append(opt.get('value'))
+                            break
             x=0
             mppt_strings= {}
             while x < len(pv_size):
-            #for pv in pv_size:
-                data = {
-                        "pv_size": pv_size[x].attrs["value"],
-                        "pv_number_panels": pv_number_panels[x].option.value,
-                        "pv_panel_direction": pv_panel_direction[x].option.value
-                        }
+                data = {}
+                data["pv_size"] = pv_size[x].attrs["value"]
+                if len(pv_number_panels) >x:
+                    data["pv_number_panels"] = pv_number_panels[x]
+                if len(pv_panel_direction) >x:
+                    data["pv_panel_direction"] = pv_panel_direction[x]
                 x=x+1
                 mppt_strings['mppt_'+str(x)] = data
             self._redback_mppt_data[serial_number] = mppt_strings
@@ -638,7 +651,7 @@ class RedbackTechClient:
         """Create device info."""
         if await self._check_device_info_refresh():
             self._serial_numbers = await self._get_inverter_list()
-            await self.get_inverter_mppt_data(self._serial_numbers)
+            await self._get_inverter_mppt_data(self._serial_numbers)
             self._device_info_refresh_time = datetime.now() + timedelta(seconds=DEVICEINFOREFRESH)
         self._redback_device_info = []
         self._redback_entities = []
@@ -1265,7 +1278,7 @@ class RedbackTechClient:
             self._redback_entities.append(data_dict)
             if data['Data']['Nodes'][0]['StaticData']['Id'] in self._redback_mppt_data:
                 if ("mppt_"+str(pvId)) in self._redback_mppt_data[data['Data']['Nodes'][0]['StaticData']['Id']]:
-                    if self._redback_mppt_data[data['Data']['Nodes'][0]['StaticData']['Id']]["mppt_"+str(pvId)]["pv_size"] is not None:
+                    if "pv_size" in self._redback_mppt_data[data['Data']['Nodes'][0]['StaticData']['Id']]["mppt_"+str(pvId)]:
                         entity_name_temp = f'mppt_{pvId}_size_kw'
                         data_dict = {'value': round(float(self._redback_mppt_data[data['Data']['Nodes'][0]['StaticData']['Id']]["mppt_"+str(pvId)]["pv_size"]),3) ,'entity_name': entity_name_temp, 'device_id': id_temp, 'device_type': 'inverter'}
                         self._redback_entities.append(data_dict)
@@ -1273,11 +1286,11 @@ class RedbackTechClient:
                         temp_data =round(( pv['PowerkW'] /float(self._redback_mppt_data[data['Data']['Nodes'][0]['StaticData']['Id']]["mppt_"+str(pvId)]["pv_size"])) * 100,2)
                         data_dict = {'value': temp_data ,'entity_name': entity_name_temp, 'device_id': id_temp, 'device_type': 'inverter'}
                         self._redback_entities.append(data_dict)
-                    if self._redback_mppt_data[data['Data']['Nodes'][0]['StaticData']['Id']]["mppt_"+str(pvId)]["pv_number_panels"] is not None:
+                    if "pv_number_panels" in self._redback_mppt_data[data['Data']['Nodes'][0]['StaticData']['Id']]["mppt_"+str(pvId)]:
                         entity_name_temp = f'mppt_{pvId}_number_panels'
                         data_dict = {'value': self._redback_mppt_data[data['Data']['Nodes'][0]['StaticData']['Id']]["mppt_"+str(pvId)]["pv_number_panels"] ,'entity_name': entity_name_temp, 'device_id': id_temp, 'device_type': 'inverter'}
                         self._redback_entities.append(data_dict)
-                    if self._redback_mppt_data[data['Data']['Nodes'][0]['StaticData']['Id']]["mppt_"+str(pvId)]["pv_panel_direction"] is not None:
+                    if "pv_panel_direction" in self._redback_mppt_data[data['Data']['Nodes'][0]['StaticData']['Id']]["mppt_"+str(pvId)]:
                         entity_name_temp = f'mppt_{pvId}_panel_direction'
                         data_dict = {'value': self._redback_mppt_data[data['Data']['Nodes'][0]['StaticData']['Id']]["mppt_"+str(pvId)]["pv_panel_direction"] ,'entity_name': entity_name_temp, 'device_id': id_temp, 'device_type': 'inverter'}
                         self._redback_entities.append(data_dict)
