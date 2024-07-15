@@ -823,6 +823,10 @@ class RedbackTechClient:
             mode = 'Force Charge Battery'
         elif entity["inverter_mode"] == "ForceDischargeBattery":
             mode = 'Force Discharge Battery'
+        elif entity["inverter_mode"] == "Conserve":
+            mode = 'Conserve Battery'
+        else:
+            mode = entity["inverter_mode"]
         description_text = (
             "Inverter Serial Number: " + entity['serial_number']
             + " during this time the inverter will be in " + mode + " mode with a Power Level set at:"
