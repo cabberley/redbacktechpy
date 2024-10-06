@@ -504,7 +504,7 @@ class RedbackTechClient:
         for site in self._redback_site_ids:
             device_id = site[-4:] + 'env'
             self._redback_op_env_data.setdefault(site, None)
-            self._redback_op_env_active.setdefault(site, None)
+            self._redback_op_env_active.setdefault(site, False)
             await self._create_op_env_active_entities(data=None, device_id=device_id, site=site)
             await self._create_op_env_number_entities(device_id, site)
             await self._create_op_env_text_entities(device_id, site)
@@ -1393,8 +1393,9 @@ class RedbackTechClient:
         self._redback_entities.append(data_dict)
         data_dict = {'value': datetime.fromisoformat((data2['Data']['TimestampUtc']).replace('Z','+00:00')),'entity_name': 'timestamp_utc', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(data_dict)
-        data_dict = {'value': (data2['Data']['BatterySoCInstantaneous0to1'])*100,'entity_name': 'battery_soc_instantaneous_0to1', 'device_id': id_temp, 'device_type': 'battery'}
-        self._redback_entities.append(data_dict)
+        if data2['Data']['BatterySoCInstantaneous0to1'] is not None:
+            data_dict = {'value': (data2['Data']['BatterySoCInstantaneous0to1'])*100,'entity_name': 'battery_soc_instantaneous_0to1', 'device_id': id_temp, 'device_type': 'battery'}
+            self._redback_entities.append(data_dict)
         data_dict = {'value': data2['Data']['BatteryPowerNegativeIsChargingkW'],'entity_name': 'battery_power_negative_is_charging_kw', 'device_id': id_temp, 'device_type': 'battery'}
         self._redback_entities.append(data_dict)
         if data2['Data']['BatteryChargeAllTimeEnergykWh'] is not None:
@@ -1417,50 +1418,52 @@ class RedbackTechClient:
         self._redback_entities.append(data_dict)
         data_dict = {'value': data2['Data']['Battery']['NumberOfModules'],'entity_name': 'battery_no_of_modules', 'device_id': id_temp, 'device_type': 'battery'}
         self._redback_entities.append(data_dict)
-        data_dict = {'value':(data['Data']['StaticData']['SiteDetails']['BatteryCapacitykWh'] * data2['Data']['BatterySoCInstantaneous0to1'] ),'entity_name': 'battery_currently_stored_kwh', 'device_id': id_temp, 'device_type': 'battery'}
-        self._redback_entities.append(data_dict)
-        data_dict = {'value':  round(data['Data']['StaticData']['SiteDetails']['BatteryCapacitykWh'] * (data2['Data']['BatterySoCInstantaneous0to1']- soc_data['Data']['MinSoC0to1']),2),'entity_name': 'battery_currently_usable_kwh', 'device_id': id_temp, 'device_type': 'battery'}
-        self._redback_entities.append(data_dict)
+        if data2['Data']['BatterySoCInstantaneous0to1'] is not None:
+            data_dict = {'value':(data['Data']['StaticData']['SiteDetails']['BatteryCapacitykWh'] * data2['Data']['BatterySoCInstantaneous0to1'] ),'entity_name': 'battery_currently_stored_kwh', 'device_id': id_temp, 'device_type': 'battery'}
+            self._redback_entities.append(data_dict)
+            data_dict = {'value':  round(data['Data']['StaticData']['SiteDetails']['BatteryCapacitykWh'] * (data2['Data']['BatterySoCInstantaneous0to1']- soc_data['Data']['MinSoC0to1']),2),'entity_name': 'battery_currently_usable_kwh', 'device_id': id_temp, 'device_type': 'battery'}
+            self._redback_entities.append(data_dict)
         battery_current_a = 0
         battery_power_kw = 0
-        for battery in data['Data']['Nodes'][0]['StaticData']['BatteryModels']:
-            if battery != 'Unknown':
-                batteryName = battery
-                data_dict = {'value': batteryName,'entity_name': f'battery_{batteryId}_model', 'device_id': id_temp, 'device_type': 'battery'}
+        if  data2['Data']['Battery']['Modules'] is not None:
+            for battery in data['Data']['Nodes'][0]['StaticData']['BatteryModels']:
+                if battery != 'Unknown':
+                    batteryName = battery
+                    data_dict = {'value': batteryName,'entity_name': f'battery_{batteryId}_model', 'device_id': id_temp, 'device_type': 'battery'}
+                    self._redback_entities.append(data_dict)
+                else:
+                    data_dict = {'value': batteryName,'entity_name': f'battery_{batteryId}_model', 'device_id': id_temp, 'device_type': 'battery'}
+                    self._redback_entities.append(data_dict)
+                battery_temp_value = data2['Data']['Battery']['Modules'][batteryId-1]['CurrentNegativeIsChargingA']
+                battery_current_a += battery_temp_value
+                battery_temp_name= f'battery_{batteryId}_current_negative_is_charging_a'
+                data_dict = {'value': battery_temp_value,'entity_name': battery_temp_name, 'device_id': id_temp, 'device_type': 'battery'}
                 self._redback_entities.append(data_dict)
-            else:
-                data_dict = {'value': batteryName,'entity_name': f'battery_{batteryId}_model', 'device_id': id_temp, 'device_type': 'battery'}
+                battery_temp_value = data2['Data']['Battery']['Modules'][batteryId-1]['VoltageV']
+                battery_temp_name= f'battery_{batteryId}_voltage_v'
+                data_dict = {'value': battery_temp_value,'entity_name': battery_temp_name, 'device_id': id_temp, 'device_type': 'battery'}
                 self._redback_entities.append(data_dict)
-            battery_temp_value = data2['Data']['Battery']['Modules'][batteryId-1]['CurrentNegativeIsChargingA']
-            battery_current_a += battery_temp_value
-            battery_temp_name= f'battery_{batteryId}_current_negative_is_charging_a'
-            data_dict = {'value': battery_temp_value,'entity_name': battery_temp_name, 'device_id': id_temp, 'device_type': 'battery'}
+                battery_temp_value = data2['Data']['Battery']['Modules'][batteryId-1]['PowerNegativeIsChargingkW']
+                battery_power_kw += battery_temp_value
+                battery_temp_name= f'battery_{batteryId}_power_negative_is_charging_kw'
+                data_dict = {'value': battery_temp_value,'entity_name': battery_temp_name, 'device_id': id_temp, 'device_type': 'battery'}
+                self._redback_entities.append(data_dict)
+                battery_temp_value = (data2['Data']['Battery']['Modules'][batteryId-1]['SoC0To1'])*100
+                battery_temp_name= f'battery_{batteryId}_soc_0to1'
+                data_dict = {'value': battery_temp_value,'entity_name': battery_temp_name, 'device_id': id_temp, 'device_type': 'battery'}
+                self._redback_entities.append(data_dict)
+                batteryId += 1
+            data_dict = {'value': round(data2['Data']['BatteryPowerNegativeIsChargingkW']*1000/self._redback_temp_voltage[(data['Data']['Nodes'][0]['StaticData']['Id'])],1),'entity_name': 'battery_current_negative_is_charging_a', 'device_id': id_temp, 'device_type': 'battery'}
             self._redback_entities.append(data_dict)
-            battery_temp_value = data2['Data']['Battery']['Modules'][batteryId-1]['VoltageV']
-            battery_temp_name= f'battery_{batteryId}_voltage_v'
-            data_dict = {'value': battery_temp_value,'entity_name': battery_temp_name, 'device_id': id_temp, 'device_type': 'battery'}
-            self._redback_entities.append(data_dict)
-            battery_temp_value = data2['Data']['Battery']['Modules'][batteryId-1]['PowerNegativeIsChargingkW']
-            battery_power_kw += battery_temp_value
-            battery_temp_name= f'battery_{batteryId}_power_negative_is_charging_kw'
-            data_dict = {'value': battery_temp_value,'entity_name': battery_temp_name, 'device_id': id_temp, 'device_type': 'battery'}
-            self._redback_entities.append(data_dict)
-            battery_temp_value = (data2['Data']['Battery']['Modules'][batteryId-1]['SoC0To1'])*100
-            battery_temp_name= f'battery_{batteryId}_soc_0to1'
-            data_dict = {'value': battery_temp_value,'entity_name': battery_temp_name, 'device_id': id_temp, 'device_type': 'battery'}
-            self._redback_entities.append(data_dict)
-            batteryId += 1
-        data_dict = {'value': round(data2['Data']['BatteryPowerNegativeIsChargingkW']*1000/self._redback_temp_voltage[(data['Data']['Nodes'][0]['StaticData']['Id'])],1),'entity_name': 'battery_current_negative_is_charging_a', 'device_id': id_temp, 'device_type': 'battery'}
-        self._redback_entities.append(data_dict)
-        for cabinet in data2['Data']['Battery']['Cabinets']:
-            cabinet_temp_name = f'battery_cabinet_{cabinetId}_temperature_c'
-            data_dict = {'value': cabinet['TemperatureC'],'entity_name': cabinet_temp_name, 'device_id': id_temp, 'device_type': 'battery'}
-            self._redback_entities.append(data_dict)
-            cabinet_temp_name = f'battery_cabinet_{cabinetId}_fan_state'
-            data_dict = {'value': cabinet['FanState'],'entity_name': cabinet_temp_name, 'device_id': id_temp, 'device_type': 'battery'}
-            self._redback_entities.append(data_dict)
-            cabinetId += 1
-        self._redback_site_load[(data['Data']['Nodes'][0]['StaticData']['Id'])] += data2['Data']['BatteryPowerNegativeIsChargingkW']
+            for cabinet in data2['Data']['Battery']['Cabinets']:
+                cabinet_temp_name = f'battery_cabinet_{cabinetId}_temperature_c'
+                data_dict = {'value': cabinet['TemperatureC'],'entity_name': cabinet_temp_name, 'device_id': id_temp, 'device_type': 'battery'}
+                self._redback_entities.append(data_dict)
+                cabinet_temp_name = f'battery_cabinet_{cabinetId}_fan_state'
+                data_dict = {'value': cabinet['FanState'],'entity_name': cabinet_temp_name, 'device_id': id_temp, 'device_type': 'battery'}
+                self._redback_entities.append(data_dict)
+                cabinetId += 1
+            self._redback_site_load[(data['Data']['Nodes'][0]['StaticData']['Id'])] += data2['Data']['BatteryPowerNegativeIsChargingkW']
         return
 
     async def _add_additional_entities(self, site_load_data, data):
