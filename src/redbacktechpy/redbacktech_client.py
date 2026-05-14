@@ -1284,10 +1284,11 @@ class RedbackTechClient:
                 if ("mppt_"+str(pvId)) in self._redback_mppt_data[data['Data']['Nodes'][0]['StaticData']['Id']]:
                     if "pv_size" in self._redback_mppt_data[data['Data']['Nodes'][0]['StaticData']['Id']]["mppt_"+str(pvId)]:
                         entity_name_temp = f'mppt_{pvId}_size_kw'
-                        data_dict = {'value': round(float(self._redback_mppt_data[data['Data']['Nodes'][0]['StaticData']['Id']]["mppt_"+str(pvId)]["pv_size"]),3) ,'entity_name': entity_name_temp, 'device_id': id_temp, 'device_type': 'inverter'}
+                        data_dict = {'value': round(float(self._redback_mppt_data[data['Data']['Nodes'][0]['StaticData']['Id']]["mppt_"+str(pvId)]["pv_size"] or 0),3) ,'entity_name': entity_name_temp, 'device_id': id_temp, 'device_type': 'inverter'}
                         self._redback_entities.append(data_dict)
                         entity_name_temp = f'mppt_{pvId}_generation_instant'
-                        temp_data =round(( pv['PowerkW'] /float(self._redback_mppt_data[data['Data']['Nodes'][0]['StaticData']['Id']]["mppt_"+str(pvId)]["pv_size"])) * 100,2)
+                        pv_size = float(self._redback_mppt_data[data['Data']['Nodes'][0]['StaticData']['Id']]["mppt_"+str(pvId)]["pv_size"] or 0)
+                        temp_data = round((pv['PowerkW'] / pv_size) * 100, 2) if pv_size else 0
                         data_dict = {'value': temp_data ,'entity_name': entity_name_temp, 'device_id': id_temp, 'device_type': 'inverter'}
                         self._redback_entities.append(data_dict)
                     if "pv_number_panels" in self._redback_mppt_data[data['Data']['Nodes'][0]['StaticData']['Id']]["mppt_"+str(pvId)]:
