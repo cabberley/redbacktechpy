@@ -54,7 +54,7 @@ class RedbackTechClient:
         self.timeout: int = timeout
         self.serial_numbers: list[str] | None = None
         self._session1: ClientSession = session1 if session1 else ClientSession()
-        self._session2: None # ClientSession = session2 if session2 else ClientSession()
+        self._session2: ClientSession | None = session2
         self._include_envelopes: bool = include_envelopes
         self.token: str | None = None
         self.token_type: str | None = None
@@ -187,12 +187,14 @@ class RedbackTechClient:
 
         response = await self._api_post(login_url, headers, data)
         self.token = response['token_type'] + ' '+ response['access_token']
-        self.token_type = ['token_type']
+        self.token_type = response['token_type']
         self.token_expiration = datetime.now() + timedelta(seconds=response['expires_in'])
         return
 
     async def _portal_login(self) -> None:
         """Login to Redback Portal and obtain token."""
+        if self._session2 is not None and not self._session2.closed:
+            await self._session2.close()
         self._session2 = ClientSession() #.cookie_jar.clear()
         login_url = f'{BaseUrl.PORTAL}{Endpoint.PORTAL_LOGIN}'
         response = await self._portal_get(login_url, {}, {})
@@ -304,12 +306,12 @@ class RedbackTechClient:
                 'ArgumentInWatts': int(power)
             }
         }
+        await self._check_token()
         headers = {
             'Authorization': self.token,
             'Content_type': 'application/json',
             'accept': 'text/plain'
         }
-        await self._check_token()
         await self._api_post_json(f'{BaseUrl.API}{Endpoint.API_SCHEDULE_CREATE_BY_SERIALNUMBER}', headers, post_data)
         return
 
@@ -643,8 +645,10 @@ class RedbackTechClient:
 
     async def close_sessions(self) -> None:
         """Close sessions."""
-        await self._session1.close()
-        await self._session2.close()
+        if self._session1 is not None and not self._session1.closed:
+            await self._session1.close()
+        if self._session2 is not None and not self._session2.closed:
+            await self._session2.close()
         return True
 
     async def _create_device_info(self) -> None:
@@ -937,7 +941,7 @@ class RedbackTechClient:
         or has already expired, a new token is obtained.
         """
         current_dt = datetime.now()
-        if (self.token or self.token_expiration) is None:
+        if self.token is None or self.token_expiration is None:
             await self._api_login()
         elif (self.token_expiration-current_dt).total_seconds() < 300:
             await self._api_login()
