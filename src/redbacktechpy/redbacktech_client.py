@@ -1323,7 +1323,7 @@ class RedbackTechClient:
             data_dict = {'value': phase['ActiveImportedPowerInstantaneouskW'],'entity_name': entity_name_temp, 'device_id': id_temp, 'device_type': 'inverter'}
             self._redback_entities.append(data_dict)
             entity_name_temp = f'inverter_phase_{phaseAlpha}_active_net_power_instantaneous_kw'
-            data_dict = {'value': phase['ActiveImportedPowerInstantaneouskW'] - phase['ActiveExportedPowerInstantaneouskW'],'entity_name': entity_name_temp, 'device_id': id_temp, 'device_type': 'inverter'}
+            data_dict = {'value': (phase['ActiveImportedPowerInstantaneouskW'] or 0) - (phase['ActiveExportedPowerInstantaneouskW'] or 0),'entity_name': entity_name_temp, 'device_id': id_temp, 'device_type': 'inverter'}
             self._redback_entities.append(data_dict)
             entity_name_temp = f'inverter_phase_{phaseAlpha}_voltage_instantaneous_v'
             data_dict = {'value': phase['VoltageInstantaneousV'],'entity_name': entity_name_temp, 'device_id': id_temp, 'device_type': 'inverter'}
