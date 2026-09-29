@@ -43,6 +43,13 @@ from .exceptions import (
 
 LOGGER = logging.getLogger(__name__)
 
+
+def _safe_divide(numerator, denominator, default=0):
+    """Divide numerator by denominator, returning default if either is None or denominator is zero."""
+    if numerator is None or denominator is None or denominator == 0:
+        return default
+    return numerator / denominator
+
 class RedbackTechClient:
     """Redback Tech Client"""
 
@@ -1334,8 +1341,9 @@ class RedbackTechClient:
             entity_name_temp = f'inverter_phase_{phaseAlpha}_power_factor_instantaneous_minus_1to1'
             data_dict = {'value': phase['PowerFactorInstantaneousMinus1to1'],'entity_name': entity_name_temp, 'device_id': id_temp, 'device_type': 'inverter'}
             self._redback_entities.append(data_dict)
-        self._redback_temp_voltage[(data['Data']['Nodes'][0]['StaticData']['Id'])] = round( phase_voltage_sum / phase_count * sqrt(phase_count), 1)
-        data_dict = {'value': round( phase_voltage_sum / phase_count * sqrt(phase_count), 1), 'entity_name': 'inverter_phase_total_voltage_instantaneous_v', 'device_id': id_temp, 'device_type': 'inverter'}
+        phase_total_voltage = round(_safe_divide(phase_voltage_sum, phase_count) * sqrt(phase_count), 1)
+        self._redback_temp_voltage[(data['Data']['Nodes'][0]['StaticData']['Id'])] = phase_total_voltage
+        data_dict = {'value': phase_total_voltage, 'entity_name': 'inverter_phase_total_voltage_instantaneous_v', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(data_dict)
         data_dict = {'value': phase_Current_sum, 'entity_name': 'inverter_phase_total_current_instantaneous_a', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(data_dict)
@@ -1345,7 +1353,7 @@ class RedbackTechClient:
         self._redback_entities.append(data_dict)
         data_dict = {'value': round(phase_power_net_sum,3), 'entity_name': 'inverter_phase_total_active_net_power_instantaneous_kw', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(data_dict)
-        pv_percent = (data2['Data']['PvPowerInstantaneouskW'] / data['Data']['StaticData']['SiteDetails']['PanelSizekW']) * 100
+        pv_percent = _safe_divide(data2['Data']['PvPowerInstantaneouskW'], data['Data']['StaticData']['SiteDetails']['PanelSizekW']) * 100
         data_dict = {'value': round(pv_percent,0), 'entity_name': 'pv_generation_instantaneous_percent_capacity', 'device_id': id_temp, 'device_type': 'inverter'}
         self._redback_entities.append(data_dict)
         self._redback_site_load[(data['Data']['Nodes'][0]['StaticData']['Id'])] = phase_power_net_sum + data2['Data']['PvPowerInstantaneouskW']
@@ -1451,7 +1459,9 @@ class RedbackTechClient:
             data_dict = {'value': battery_temp_value,'entity_name': battery_temp_name, 'device_id': id_temp, 'device_type': 'battery'}
             self._redback_entities.append(data_dict)
             batteryId += 1
-        data_dict = {'value': round(data2['Data']['BatteryPowerNegativeIsChargingkW']*1000/self._redback_temp_voltage[(data['Data']['Nodes'][0]['StaticData']['Id'])],1),'entity_name': 'battery_current_negative_is_charging_a', 'device_id': id_temp, 'device_type': 'battery'}
+        battery_power_kw_temp = data2['Data']['BatteryPowerNegativeIsChargingkW']
+        battery_current_a = _safe_divide(battery_power_kw_temp * 1000 if battery_power_kw_temp is not None else None, self._redback_temp_voltage.get(data['Data']['Nodes'][0]['StaticData']['Id']))
+        data_dict = {'value': round(battery_current_a,1),'entity_name': 'battery_current_negative_is_charging_a', 'device_id': id_temp, 'device_type': 'battery'}
         self._redback_entities.append(data_dict)
         for cabinet in data2['Data']['Battery']['Cabinets']:
             cabinet_temp_name = f'battery_cabinet_{cabinetId}_temperature_c'
